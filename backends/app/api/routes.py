@@ -73,7 +73,7 @@ def create_app() -> FastAPI:
             error_code=exc.detail if isinstance(exc.detail, str) else "HTTP_ERROR",
             error_message=str(exc.detail),
         )
-        return JSONResponse(status_code=exc.status_code, content=error.model_dump())
+        return JSONResponse(status_code=exc.status_code, content=error.model_dump(mode='json'))
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -84,7 +84,7 @@ def create_app() -> FastAPI:
             error_code="INTERNAL_ERROR",
             error_message="Internal server error",
         )
-        return JSONResponse(status_code=500, content=error.model_dump())
+        return JSONResponse(status_code=500, content=error.model_dump(mode='json'))
 
     app.include_router(router)
     return app
@@ -132,12 +132,12 @@ async def status() -> StatusResponse:
 async def realtime_data(
     count: int = Query(100, ge=1, le=1000, description="Number of data points"),
 ) -> RealtimeDataResponse:
-    logger.debug("Realtime data requested with count=%d", count)
+    logger.debug("📈 Realtime data requested: count=%d", count)
     frames = data_store.get_series(count)
     if not frames:
         # 如果没有数据，返回空序列和默认 ROI
         now = datetime.utcnow()
-        logger.info("Realtime data requested but no frames available")
+        logger.info("⚠️ Realtime data requested but no frames available - returning empty response")
         return RealtimeDataResponse(
             timestamp=now,
             frame_count=0,
@@ -178,7 +178,7 @@ async def realtime_data(
     )
 
     logger.debug(
-        "Realtime data response frame_count=%d points=%d last_value=%.3f peak_signal=%s baseline=%.3f",
+        "📊 Realtime data response: frame_count=%d points=%d last_value=%.3f peak_signal=%s baseline=%.3f",
         frame_count,
         len(series),
         series[-1].value if series else 0.0,
@@ -214,7 +214,7 @@ async def control(
     cmd_upper = cmd_raw.upper()
     cmd_lower = cmd_raw.lower()
     now = datetime.utcnow()
-    logger.info("Control command received: raw=%s upper=%s lower=%s", cmd_raw, cmd_upper, cmd_lower)
+    logger.info("🎛️ Control command received: raw='%s' upper='%s' lower='%s'", cmd_raw, cmd_upper, cmd_lower)
 
     if cmd_upper == "PEAK_SIGNAL":
         (
@@ -238,7 +238,7 @@ async def control(
             frame_count,
             current_value,
         )
-        return JSONResponse(content=resp.model_dump())
+        return JSONResponse(content=resp.model_dump(mode='json'))
 
     if cmd_upper == "STATUS":
         system_status = data_store.get_status()
@@ -253,7 +253,7 @@ async def control(
             system_status,
             str(data_store.get_last_peak_signal()),
         )
-        return JSONResponse(content=resp.model_dump())
+        return JSONResponse(content=resp.model_dump(mode='json'))
 
     # 控制检测流程的命令使用 control_response 格式
     if cmd_lower == "start_detection":
@@ -265,8 +265,8 @@ async def control(
             status="success",
             message="Detection started",
         )
-        logger.info("Control start_detection executed, status=%s", system_status)
-        return JSONResponse(content=resp.model_dump())
+        logger.info("✅ Detection started successfully, status=%s", system_status)
+        return JSONResponse(content=resp.model_dump(mode='json'))
 
     if cmd_lower == "stop_detection":
         processor.stop()
@@ -277,8 +277,8 @@ async def control(
             status="success",
             message="Detection stopped",
         )
-        logger.info("Control stop_detection executed, status=%s", system_status)
-        return JSONResponse(content=resp.model_dump())
+        logger.info("⏹️ Detection stopped successfully, status=%s", system_status)
+        return JSONResponse(content=resp.model_dump(mode='json'))
 
     if cmd_lower == "pause_detection":
         processor.stop()
@@ -289,7 +289,7 @@ async def control(
             message="Detection paused",
         )
         logger.info("Control pause_detection executed")
-        return JSONResponse(content=resp.model_dump())
+        return JSONResponse(content=resp.model_dump(mode='json'))
 
     if cmd_lower == "resume_detection":
         processor.start()
@@ -300,7 +300,7 @@ async def control(
             message="Detection resumed",
         )
         logger.info("Control resume_detection executed")
-        return JSONResponse(content=resp.model_dump())
+        return JSONResponse(content=resp.model_dump(mode='json'))
 
     # 未知命令
     error = ErrorResponse(
@@ -314,7 +314,7 @@ async def control(
         ),
     )
     logger.warning("Control received invalid command: %s", command)
-    return JSONResponse(status_code=400, content=error.model_dump())
+    return JSONResponse(status_code=400, content=error.model_dump(mode='json'))
 
 
 @router.post("/analyze", response_model=AnalyzeResponse)

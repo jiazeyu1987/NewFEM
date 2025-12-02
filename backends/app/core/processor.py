@@ -58,16 +58,24 @@ class DataProcessor:
             peak_signal: Optional[int] = None
             if signal - baseline > threshold:
                 peak_signal = 1
+                self._logger.info(
+                    "🔴 PEAK DETECTED! signal=%.3f baseline=%.3f threshold=%.3f difference=%.3f",
+                    signal,
+                    baseline,
+                    threshold,
+                    signal - baseline
+                )
 
             now = datetime.utcnow()
             data_store.add_frame(value=signal, timestamp=now, peak_signal=peak_signal)
 
+            # 高频信号生成日志改为DEBUG级别，避免控制台噪音
             self._logger.debug(
-                "Generated frame t=%.3f value=%.3f baseline=%.3f peak_signal=%s",
+                "📊 Signal Generated: t=%.3f value=%.3f baseline=%.3f peak_signal=%s",
                 t,
                 signal,
                 baseline,
-                str(peak_signal),
+                str(peak_signal) if peak_signal is not None else "null"
             )
 
             t += interval
