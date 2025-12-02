@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NewFEM - Focused Emboli Monitor</title>
+    <style>
+        /* --- VS Code Theme Variables --- */
+        :root {
+            --bg-color: #1e1e1e;
+            --sidebar-bg: #252526;
+            --activity-bar-bg: #333333;
+            --text-color: #cccccc;
+            --text-highlight: #ffffff;
+            --accent-color: #007acc;
+            --accent-hover: #0062a3;
+            --border-color: #3e3e42;
+            --input-bg: #3c3c3c;
+            --button-bg: #0e639c;
+            --button-hover: #1177bb;
+            --success-color: #4ec9b0;
+            --warning-color: #dcdcaa;
+            --error-color: #f48771;
+            --grid-color: #404040;
+            --baseline-color: #dcdcaa;
+            --chart-line-color: #4ec9b0;
+            --panel-header-bg: #303031;
+            --status-bar-bg: #007acc;
+        }
+
+        /* --- Global Reset & Layout --- */
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+            font-size: 13px;
+        }
+
+        /* --- Sidebar --- */
+        .sidebar {
+            width: 300px;
+            background-color: var(--sidebar-bg);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .panel {
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .panel-header {
+            background-color: var(--panel-header-bg);
+            padding: 8px 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 11px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+        
+        .panel-content {
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* --- UI Components --- */
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 0;
+        }
+
+        .status-value {
+            color: var(--text-highlight);
+            font-family: 'Consolas', 'Courier New', monospace;
+        }
+
+        .indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+        .indicator.connected { background-color: var(--success-color); box-shadow: 0 0 5px var(--success-color); }
+        .indicator.disconnected { background-color: var(--error-color); }
+        .indicator.connecting { background-color: var(--warning-color); animation: pulse 1s infinite; }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+        .control-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        button {
+            background-color: var(--button-bg);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 12px;
+            border-radius: 2px;
+            transition: background 0.2s;
+        }
+        button:hover:not(:disabled) { background-color: var(--button-hover); }
+        button:disabled { background-color: #3a3a3a; color: #888; cursor: not-allowed; }
+        button.danger { background-color: #a1260d; }
+        button.danger:hover { background-color: #c93312; }
+
+        .toggle-switch {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+        .toggle-switch input { display: none; }
+        .slider {
+            width: 30px;
+            height: 16px;
+            background-color: #3a3a3a;
+            border-radius: 10px;
+            position: relative;
+            margin-right: 8px;
+            transition: .2s;
+        }
+        .slider:before {
+            content: "";
+            position: absolute;
+            height: 12px;
+            width: 12px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            border-radius: 50%;
+            transition: .2s;
+        }
+        input:checked + .slider { background-color: var(--accent-color); }
+        input:checked + .slider:before { transform: translateX(14px); }
+
+        .range-slider-container {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        input[type=range] {
+            width: 100%;
+            background: transparent;
+            -webkit-appearance: none;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 14px;
+            width: 14px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            cursor: pointer;
+            margin-top: -5px;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            background: #3a3a3a;
+            border-radius: 2px;
+        }
+
+        #roi-canvas {
+            background-color: #000;
+            border: 1px solid var(--border-color);
+            width: 200px;
+            height: 150px;
+            margin: 0 auto;
+            image-rendering: pixelated;
+        }
+
+        /* --- Main Content --- */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: #1e1e1e;
+            position: relative;
+        }
+
+        .chart-toolbar {
+            height: 35px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            background-color: var(--bg-color);
+        }
+
+        .chart-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            cursor: crosshair;
+        }
+
+        .status-bar {
+            height: 22px;
+            background-color: var(--status-bar-bg);
+            color: white;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            font-size: 11px;
+            justify-content: space-between;
+        }
+
+        /* Tooltip */
+        #tooltip {
+            position: absolute;
+            background: rgba(37, 37, 38, 0.9);
+            border: 1px solid var(--accent-color);
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 11px;
+            pointer-events: none;
+            display: none;
+            z-index: 100;
+        }
+
+        /* Signal indicators */
+        .signal-indicator {
+            padding: 2px 6px;
+            border-radius: 2px;
+            font-weight: bold;
+        }
+        .signal-green { color: var(--success-color); background: rgba(78, 201, 176, 0.1); }
+        .signal-red { color: var(--error-color); background: rgba(244, 135, 113, 0.1); }
+        .signal-none { color: #666; }
+
+    </style>
+</head>
+<body>
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+        <!-- 3.1 系统状态面板 -->
+        <div class="panel">
+            <div class="panel-header">系统状态</div>
+            <div class="panel-content">
+                <div class="status-row">
+                    <span>连接状态</span>
+                    <div>
+                        <span id="connection-indicator" class="indicator disconnected"></span>
+                        <span id="connection-text">Disconnected</span>
+                    </div>
+                </div>
+                <div class="status-row">
+                    <span>帧数计数</span>
+                    <span id="frame-count" class="status-value">0</span>
+                </div>
+                <div class="status-row">
+                    <span>当前值</span>
+                    <span id="current-value" class="status-value">0.00</span>
+                </div>
+                <div class="status-row">
+                    <span>基线值</span>
+                    <span id="baseline-value" class="status-value">0.00</span>
+                </div>
+                <div class="status-row">
+                    <span>波峰信号</span>
+                    <span id="peak-signal" class="status-value signal-none">NULL</span>
+                </div>
+                 <div class="status-row">
+                    <span>缓冲区</span>
+                    <span id="buffer-size" class="status-value">0</span>
+                </div>
+                <div class="status-row">
+                    <span>FPS</span>
+                    <span id="update-rate" class="status-value">0 Hz</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3.2 显示控制面板 -->
+        <div class="panel">
+            <div class="panel-header">显示控制</div>
+            <div class="panel-content">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="show-grid" checked>
+                    <div class="slider"></div>
+                    <span>显示网格</span>
+                </label>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="show-baseline" checked>
+                    <div class="slider"></div>
+                    <span>显示基线</span>
+                </label>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="show-points" checked>
+                    <div class="slider"></div>
+                    <span>显示数据点</span>
+                </label>
+                
+                <div class="range-slider-container">
+                    <div class="status-row">
+                        <span>Y轴缩放</span>
+                        <span id="zoom-value" class="status-value">1.0x</span>
+                    </div>
+                    <input type="range" id="zoom-slider" min="0.5" max="3.0" step="0.1" value="1.0">
+                </div>
+            </div>
+        </div>
+
+        <!-- 3.3 ROI 图像显示 -->
+        <div class="panel">
+            <div class="panel-header">ROI 监控</div>
+            <div class="panel-content" style="align-items: center;">
+                <canvas id="roi-canvas" width="200" height="150"></canvas>
+                <div class="status-row" style="width: 100%">
+                    <span>ROI 平均灰度:</span>
+                    <span id="roi-gray-value" class="status-value">0.0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3.4 检测控制面板 -->
+        <div class="panel">
+            <div class="panel-header">控制台</div>
+            <div class="panel-content">
+                <div class="status-row">
+                    <span>状态:</span>
+                    <span id="detection-state" style="color:var(--accent-color); font-weight:bold;">IDLE</span>
+                </div>
+                <div class="control-group">
+                    <button id="start-btn">开始检测</button>
+                    <button id="stop-btn" class="danger" disabled>停止</button>
+                    <button id="pause-btn" disabled>暂停</button>
+                    <button id="resume-btn" disabled>恢复</button>
+                </div>
+                <button id="refresh-status-btn" style="width: 100%; margin-top: 5px;">刷新系统状态</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="main-content">
+        <div class="chart-toolbar">
+            <span style="font-weight: 600; font-size: 12px;">实时灰度波形图 (Real-time Waveform)</span>
+        </div>
+        
+        <div class="chart-container" id="chart-container">
+            <canvas id="waveform-chart"></canvas>
+            <div id="tooltip"></div>
+        </div>
+
+        <div class="status-bar">
+            <span id="chart-status">Ready</span>
+            <span id="last-update">Last Update: --:--:--</span>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        /**
+         * 1. 全局状态管理 (appState)
+         * 对应需求 4.1
+         */
+        const appState = {
+            connected: false,
+            serverUrl: 'http://localhost:8421', // 实际环境地址
+            chartData: [],         // 格式: {t: number, value: number}[]
+            roiData: null,
+            frameCount: 0,
+            currentValue: 0,
+            peakSignal: null,      // 1 (Green), 0 (Red), null
+            baseline: 120,
+            updateRate: 20,
+            detectionState: 'IDLE', // IDLE, RUNNING, PAUSED, STOPPED
+            chartState: {
+                showGrid: true,
+                showBaseline: true,
+                showPoints: true,
+                zoom: 1.0,
+                offsetY: 0
+            },
+            // 内部使用的配置
+            maxDataPoints: 100,
+            pollingIntervals: {
+                realtime: null,
+                status: null
+            },
+            mockMode: true // 开启模拟模式以便预览
+        };
+
+        /**
+         * 2. Mock Server (模拟后端行为)
+         * 用于在无后端环境下展示功能
+         */
+        const MockServer = {
+            t: 0,
+            baseValue: 120,
+            running: false,
+            
+            // 生成模拟实时数据
+            getRealtimeData: function() {
+                if (!this.running && appState.detectionState !== 'PAUSED') {
+                    // 如果停止，只返回空或静止数据
+                     return {
+                        type: "realtime_data",
+                        timestamp: new Date().toISOString(),
+                        frame_count: appState.frameCount,
+                        series: [], 
+                        peak_signal: null,
+                        baseline: this.baseValue,
+                        roi_data: null
+                    };
+                }
+
+                // 生成正弦波 + 随机噪声
+                const points = [];
+                const now = Date.now();
+                
+                // 模拟一帧内的几个采样点
+                for(let i=0; i<3; i++) {
+                    this.t += 0.05;
+                    let val = this.baseValue + Math.sin(this.t) * 10 + (Math.random() - 0.5) * 5;
+                    
+                    // 偶尔生成波峰 (Peak)
+                    let peak = null;
+                    if (Math.random() > 0.98) {
+                        val += 40; // 突增
+                        peak = 1;
+                    }
+
+                    points.push({ t: this.t, value: val });
+                }
+
+                // 生成模拟 ROI (噪点图)
+                const roiPixels = new Uint8ClampedArray(200 * 150 * 4);
+                for (let i = 0; i < roiPixels.length; i += 4) {
+                    const gray = Math.random() * 255;
+                    roiPixels[i] = gray;     // R
+                    roiPixels[i + 1] = gray; // G
+                    roiPixels[i + 2] = gray; // B
+                    roiPixels[i + 3] = 255;  // Alpha
+                }
+                
+                return {
+                    type: "realtime_data",
+                    timestamp: new Date().toISOString(),
+                    frame_count: appState.frameCount + 1,
+                    series: points,
+                    peak_signal: Math.random() > 0.98 ? 1 : null,
+                    baseline: this.baseValue,
+                    roi_data: {
+                        width: 200,
+                        height: 150,
+                        raw: roiPixels, // Mock传递原始数据方便绘制
+                        gray_value: 120 + Math.random() * 10
+                    }
+                };
+            },
+
+            // 模拟控制命令响应
+            control: function(command) {
+                switch(command) {
+                    case 'start_detection': this.running = true; return { status: 'success' };
+                    case 'stop_detection': this.running = false; return { status: 'success' };
+                    case 'pause_detection': this.running = false; return { status: 'success' };
+                    case 'resume_detection': this.running = true; return { status: 'success' };
+                    default: return { status: 'error' };
+                }
+            }
+        };
+
+        /**
+         * 3. API通信层 (API Service)
+         * 包含 Mock 判断
+         */
+        const ApiService = {
+            async fetchRealtimeData() {
+                if (appState.mockMode) {
+                    return new Promise(resolve => setTimeout(() => resolve(MockServer.getRealtimeData()), 20)); // 模拟网络延迟
+                }
+                // 真实 Fetch 逻辑
+                try {
+                    const response = await fetch(`${appState.serverUrl}/data/realtime?count=5`);
+                    if(!response.ok) throw new Error('Network response was not ok');
+                    return await response.json();
+                } catch(e) {
+                    console.error("Fetch Error", e);
+                    return null;
+                }
+            },
+
+            async sendControl(command) {
+                if (appState.mockMode) {
+                    return Promise.resolve(MockServer.control(command));
+                }
+                // 真实控制逻辑
+                const formData = new URLSearchParams();
+                formData.append('command', command);
+                formData.append('password', '31415'); // 硬编码密码
+                
+                try {
+                    const response = await fetch(`${appState.serverUrl}/control`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: formData
+                    });
+                    return await response.json();
+                } catch(e) {
+                    return { status: 'error' };
+                }
+            }
+        };
+
+        /**
+         * 4. 渲染引擎 (Chart & ROI)
+         */
+        class WaveformChart {
+            constructor(canvasId) {
+                this.canvas = document.getElementById(canvasId);
+                this.ctx = this.canvas.getContext('2d', { alpha: false }); // 优化性能
+                this.container = document.getElementById('chart-container');
+                this.tooltip = document.getElementById('tooltip');
+                
+                this.resize();
+                window.addEventListener('resize', () => this.resize());
+                
+                // 滚轮缩放
+                this.canvas.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const delta = Math.sign(e.deltaY) * -0.1;
+                    let newZoom = Math.max(0.5, Math.min(3.0, appState.chartState.zoom + delta));
+                    appState.chartState.zoom = parseFloat(newZoom.toFixed(1));
+                    document.getElementById('zoom-slider').value = appState.chartState.zoom;
+                    document.getElementById('zoom-value').innerText = appState.chartState.zoom + 'x';
+                    this.draw();
+                });
+
+                // 鼠标交互
+                this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+                this.canvas.addEventListener('mouseleave', () => { this.tooltip.style.display = 'none'; });
+            }
+
+            resize() {
+                const rect = this.container.getBoundingClientRect();
+                // 处理 DPI
+                const dpr = window.devicePixelRatio || 1;
+                this.canvas.width = rect.width * dpr;
+                this.canvas.height = rect.height * dpr;
+                this.ctx.scale(dpr, dpr);
+                this.canvas.style.width = `${rect.width}px`;
+                this.canvas.style.height = `${rect.height}px`;
+                this.width = rect.width;
+                this.height = rect.height;
+                this.draw();
+            }
+
+            draw() {
+                if (!this.ctx) return;
+                
+                const { width, height } = this;
+                const { showGrid, showBaseline, showPoints, zoom } = appState.chartState;
+                const data = appState.chartData;
+
+                // 1. 清空背景
+                this.ctx.fillStyle = '#1e1e1e';
+                this.ctx.fillRect(0, 0, width, height);
+
+                // Y轴 映射函数: 将 0-255 映射到 Canvas 高度
+                // 放大时围绕中心点 (128) 放大
+                const midY = height / 2;
+                const scaleY = (height / 255) * zoom; 
+                const mapY = (val) => midY - (val - 128) * scaleY; // 翻转Y轴，大值在上方
+
+                // 2. 绘制网格
+                if (showGrid) {
+                    this.ctx.strokeStyle = '#333';
+                    this.ctx.lineWidth = 1;
+                    this.ctx.beginPath();
+                    // 简单的水平网格
+                    for (let v = 0; v <= 255; v += 50) {
+                        const y = mapY(v);
+                        this.ctx.moveTo(0, y);
+                        this.ctx.lineTo(width, y);
+                    }
+                    // 简单的垂直网格
+                    const step = width / 10;
+                    for (let x = 0; x < width; x += step) {
+                        this.ctx.moveTo(x, 0);
+                        this.ctx.lineTo(x, height);
+                    }
+                    this.ctx.stroke();
+                }
+
+                if (data.length === 0) return;
+
+                // X轴 步进
+                const stepX = width / (appState.maxDataPoints - 1);
+
+                // 3. 绘制基线
+                if (showBaseline) {
+                    const yBase = mapY(appState.baseline);
+                    this.ctx.strokeStyle = '#dcdcaa'; // VS Code Warning Color
+                    this.ctx.setLineDash([5, 5]);
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, yBase);
+                    this.ctx.lineTo(width, yBase);
+                    this.ctx.stroke();
+                    this.ctx.setLineDash([]);
+                }
+
+                // 4. 绘制波形
+                this.ctx.strokeStyle = '#4ec9b0'; // VS Code Success/Type Color
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                
+                data.forEach((pt, i) => {
+                    const x = i * stepX;
+                    const y = mapY(pt.value);
+                    if (i === 0) this.ctx.moveTo(x, y);
+                    else this.ctx.lineTo(x, y);
+                });
+                this.ctx.stroke();
+
+                // 5. 绘制数据点
+                if (showPoints) {
+                    this.ctx.fillStyle = '#fff';
+                    data.forEach((pt, i) => {
+                        const x = i * stepX;
+                        const y = mapY(pt.value);
+                        this.ctx.beginPath();
+                        this.ctx.arc(x, y, 2, 0, Math.PI * 2);
+                        this.ctx.fill();
+                    });
+                }
+            }
+
+            handleMouseMove(e) {
+                const rect = this.canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                
+                const stepX = this.width / (appState.maxDataPoints - 1);
+                const index = Math.round(mouseX / stepX);
+
+                if (index >= 0 && index < appState.chartData.length) {
+                    const pt = appState.chartData[index];
+                    this.tooltip.style.display = 'block';
+                    this.tooltip.style.left = (e.clientX + 10) + 'px';
+                    this.tooltip.style.top = (e.clientY + 10) + 'px';
+                    this.tooltip.innerHTML = `T: ${pt.t.toFixed(2)}s<br>Val: ${pt.value.toFixed(1)}`;
+                } else {
+                    this.tooltip.style.display = 'none';
+                }
+            }
+        }
+
+        class RoiRenderer {
+            constructor(canvasId) {
+                this.canvas = document.getElementById(canvasId);
+                this.ctx = this.canvas.getContext('2d');
+            }
+
+            render(roiData) {
+                if (!roiData) return;
+                
+                // 清空
+                this.ctx.clearRect(0, 0, 200, 150);
+
+                if (appState.mockMode && roiData.raw) {
+                    // Mock模式下直接绘制生成的像素数据
+                    const imgData = new ImageData(roiData.raw, 200, 150);
+                    this.ctx.putImageData(imgData, 0, 0);
+                } else if (roiData.format === 'base64') {
+                    const img = new Image();
+                    img.onload = () => this.ctx.drawImage(img, 0, 0, 200, 150);
+                    img.src = roiData.pixels;
+                } else {
+                    // Text format mock fallback
+                    this.ctx.fillStyle = '#333';
+                    this.ctx.fillRect(0, 0, 200, 150);
+                    this.ctx.fillStyle = '#fff';
+                    this.ctx.fillText("Text Format Data", 60, 75);
+                }
+            }
+        }
+
+        /**
+         * 5. 核心控制器 (Main Controller)
+         */
+        const chartRenderer = new WaveformChart('waveform-chart');
+        const roiRenderer = new RoiRenderer('roi-canvas');
+
+        // 更新 UI 元素
+        function updateUI() {
+            // 连接状态
+            const connInd = document.getElementById('connection-indicator');
+            const connTxt = document.getElementById('connection-text');
+            if (appState.connected) {
+                connInd.className = 'indicator connected';
+                connTxt.innerText = 'Connected';
+            } else {
+                connInd.className = 'indicator disconnected';
+                connTxt.innerText = 'Disconnected';
+            }
+
+            // 数值面板
+            document.getElementById('frame-count').innerText = appState.frameCount;
+            document.getElementById('current-value').innerText = appState.currentValue.toFixed(2);
+            document.getElementById('baseline-value').innerText = appState.baseline.toFixed(2);
+            document.getElementById('buffer-size').innerText = appState.chartData.length;
+            
+            // 波峰信号
+            const peakEl = document.getElementById('peak-signal');
+            if (appState.peakSignal === 1) {
+                peakEl.className = 'status-value signal-green';
+                peakEl.innerText = 'DETECTED';
+            } else if (appState.peakSignal === 0) {
+                peakEl.className = 'status-value signal-red';
+                peakEl.innerText = 'WEAK';
+            } else {
+                peakEl.className = 'status-value signal-none';
+                peakEl.innerText = 'NULL';
+            }
+
+            // ROI
+            if (appState.roiData) {
+                document.getElementById('roi-gray-value').innerText = appState.roiData.gray_value.toFixed(2);
+            }
+
+            // 检测状态
+            document.getElementById('detection-state').innerText = appState.detectionState;
+
+            // 按钮状态
+            const isRunning = appState.detectionState === 'RUNNING';
+            const isPaused = appState.detectionState === 'PAUSED';
+            const isIdle = appState.detectionState === 'IDLE' || appState.detectionState === 'STOPPED';
+
+            document.getElementById('start-btn').disabled = isRunning;
+            document.getElementById('stop-btn').disabled = isIdle;
+            document.getElementById('pause-btn').disabled = !isRunning;
+            document.getElementById('resume-btn').disabled = !isPaused;
+
+            // Update Time
+            const now = new Date();
+            document.getElementById('last-update').innerText = `Update: ${now.toLocaleTimeString()}`;
+        }
+
+        // 核心轮询循环
+        async function updateRealtimeData() {
+            if (!appState.connected) return;
+
+            const data = await ApiService.fetchRealtimeData();
+            if (data && data.type === 'realtime_data') {
+                // 更新全局数据
+                appState.frameCount = data.frame_count;
+                appState.peakSignal = data.peak_signal;
+                appState.baseline = data.baseline;
+                appState.roiData = data.roi_data;
+
+                if (data.series && data.series.length > 0) {
+                    const latest = data.series[data.series.length - 1];
+                    appState.currentValue = latest.value;
+                    
+                    // 维护固定长度的图表数据队列
+                    data.series.forEach(pt => {
+                        appState.chartData.push(pt);
+                    });
+                    while (appState.chartData.length > appState.maxDataPoints) {
+                        appState.chartData.shift();
+                    }
+                }
+
+                // 渲染更新
+                chartRenderer.draw();
+                roiRenderer.render(data.roi_data);
+                updateUI();
+            }
+        }
+
+        // 状态机控制
+        async function handleControl(action) {
+            // 先乐观更新UI
+            const oldState = appState.detectionState;
+            
+            let newState = oldState;
+            if (action === 'start_detection') newState = 'RUNNING';
+            if (action === 'stop_detection') newState = 'STOPPED';
+            if (action === 'pause_detection') newState = 'PAUSED';
+            if (action === 'resume_detection') newState = 'RUNNING';
+
+            appState.detectionState = newState;
+            updateUI();
+
+            // 发送命令
+            const res = await ApiService.sendControl(action);
+            if (res.status !== 'success') {
+                alert('Command failed!');
+                appState.detectionState = oldState; // 回滚
+                updateUI();
+            }
+        }
+
+        // 连接逻辑
+        function initConnection() {
+            const ind = document.getElementById('connection-indicator');
+            const txt = document.getElementById('connection-text');
+            ind.className = 'indicator connecting';
+            txt.innerText = 'Connecting...';
+
+            setTimeout(() => {
+                appState.connected = true;
+                updateUI();
+                
+                // 启动轮询
+                if (appState.pollingIntervals.realtime) clearInterval(appState.pollingIntervals.realtime);
+                appState.pollingIntervals.realtime = setInterval(updateRealtimeData, 50); // 20 FPS
+                
+                document.getElementById('chart-status').innerText = "System Online | Polling: 20FPS";
+            }, 1000);
+        }
+
+        /**
+         * 6. 事件绑定
+         */
+        document.addEventListener('DOMContentLoaded', () => {
+            // 显示控制
+            document.getElementById('show-grid').addEventListener('change', (e) => {
+                appState.chartState.showGrid = e.target.checked;
+                chartRenderer.draw();
+            });
+            document.getElementById('show-baseline').addEventListener('change', (e) => {
+                appState.chartState.showBaseline = e.target.checked;
+                chartRenderer.draw();
+            });
+            document.getElementById('show-points').addEventListener('change', (e) => {
+                appState.chartState.showPoints = e.target.checked;
+                chartRenderer.draw();
+            });
+            
+            // 缩放控制
+            const zoomSlider = document.getElementById('zoom-slider');
+            const zoomVal = document.getElementById('zoom-value');
+            zoomSlider.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                appState.chartState.zoom = val;
+                zoomVal.innerText = val + 'x';
+                chartRenderer.draw();
+            });
+
+            // 检测控制
+            document.getElementById('start-btn').addEventListener('click', () => handleControl('start_detection'));
+            document.getElementById('stop-btn').addEventListener('click', () => handleControl('stop_detection'));
+            document.getElementById('pause-btn').addEventListener('click', () => handleControl('pause_detection'));
+            document.getElementById('resume-btn').addEventListener('click', () => handleControl('resume_detection'));
+            
+            // 启动
+            initConnection();
+        });
+
+    </script>
+</body>
+</html>
