@@ -20,8 +20,12 @@ class RoiCaptureService:
 
     def __init__(self):
         self._logger = logging.getLogger(self.__class__.__name__)
+        # 从配置获取ROI帧率
+        from ..config import settings
+        self._frame_rate = settings.roi_frame_rate
+        self._cache_interval = settings.roi_update_interval  # 缓存间隔
+
         # ROI截图缓存机制
-        self._cache_interval = 0.5  # 500ms缓存间隔
         self._last_capture_time = 0.0
         self._cached_roi_data: Optional[RoiData] = None
         self._last_roi_config: Optional[RoiConfig] = None
@@ -158,6 +162,30 @@ class RoiCaptureService:
         )
 
         return roi_data
+
+    def get_roi_frame_rate(self) -> int:
+        """获取当前ROI帧率设置"""
+        return self._frame_rate
+
+    def set_roi_frame_rate(self, frame_rate: int) -> bool:
+        """
+        动态设置ROI帧率
+
+        Args:
+            frame_rate: 新的帧率 (1-60 FPS)
+
+        Returns:
+            bool: 设置是否成功
+        """
+        if 1 <= frame_rate <= 60:
+            self._frame_rate = frame_rate
+            self._cache_interval = 1.0 / frame_rate
+            self._logger.info("ROI frame rate updated to %d FPS, cache interval: %.3f seconds",
+                              frame_rate, self._cache_interval)
+            return True
+        else:
+            self._logger.error("Invalid frame rate: %d (must be 1-60)", frame_rate)
+            return False
 
     def get_screen_resolution(self) -> Tuple[int, int]:
         """

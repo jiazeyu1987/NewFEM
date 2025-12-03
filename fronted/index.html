@@ -391,6 +391,11 @@
                     <span>高度:</span>
                     <span id="roi-height" class="status-value">150 px</span>
                 </div>
+                <div class="status-row">
+                    <span>帧率设置:</span>
+                    <input type="number" id="roi-frame-rate" class="roi-input" value="2" min="1" max="60" style="width: 80px;">
+                    <span class="status-value" id="roi-fps-display">2 FPS</span>
+                </div>
                 <div class="control-group" style="margin-top: 10px;">
                     <button id="apply-roi-btn" style="width: 100%; height: 30px; font-size: 12px;">应用配置</button>
                 </div>
@@ -472,6 +477,7 @@
             // ROI更新频率控制
             roiUpdateInterval: 500,  // ROI更新间隔（毫秒）
             lastRoiUpdate: 0,        // 上次ROI更新时间
+            roiFrameRate: 2,         // ROI帧率（FPS）
             // 内部使用的配置
             maxDataPoints: 100,
             pollingIntervals: {
@@ -573,7 +579,9 @@
                 }
                 // 真实 Fetch 逻辑
                 try {
-                    const response = await fetch(`${appState.serverUrl}/data/realtime?count=5`);
+                    // 根据ROI配置状态决定请求数据量
+                    const count = appState.roiConfigured ? 1 : 5;
+                    const response = await fetch(`${appState.serverUrl}/data/realtime?count=${count}`);
                     if(!response.ok) throw new Error('Network response was not ok');
                     return await response.json();
                 } catch(e) {
@@ -656,6 +664,55 @@
                     return await response.json();
                 } catch(e) {
                     console.error("Set ROI config error:", e);
+                    return { success: false, error: str(e) };
+                }
+            },
+
+            async getRoiFrameRate() {
+                if (appState.mockMode) {
+                    return Promise.resolve({
+                        type: "roi_frame_rate",
+                        success: true,
+                        frame_rate: appState.roiFrameRate,
+                        message: `Current ROI frame rate: ${appState.roiFrameRate} FPS`
+                    });
+                }
+                try {
+                    const response = await fetch(`${appState.serverUrl}/roi/frame-rate`);
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return await response.json();
+                } catch(e) {
+                    console.error("Get ROI frame rate error:", e);
+                    return null;
+                }
+            },
+
+            async setRoiFrameRate(frameRate) {
+                if (appState.mockMode) {
+                    appState.roiFrameRate = frameRate;
+                    // 更新ROI更新间隔
+                    appState.roiUpdateInterval = 1000 / frameRate;
+                    return Promise.resolve({
+                        type: "roi_frame_rate",
+                        success: true,
+                        frame_rate: frameRate,
+                        message: `ROI frame rate updated to ${frameRate} FPS`
+                    });
+                }
+                const formData = new URLSearchParams();
+                formData.append('frame_rate', frameRate);
+                formData.append('password', '31415');
+
+                try {
+                    const response = await fetch(`${appState.serverUrl}/roi/frame-rate`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: formData
+                    });
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return await response.json();
+                } catch(e) {
+                    console.error("Set ROI frame rate error:", e);
                     return { success: false, error: str(e) };
                 }
             }
@@ -1005,9 +1062,20 @@
 
             // 根据状态设置新的轮询间隔
             if (isRunning || isPaused) {
-                // 运行或暂停状态：50ms间隔（20 FPS）
-                appState.pollingIntervals.realtime = setInterval(updateRealtimeData, 50);
-                document.getElementById('chart-status').innerText = "System Active | Polling: 20FPS";
+                // 运行或暂停状态：根据ROI帧率调整轮询频率
+                let pollingInterval;
+                if (appState.roiConfigured) {
+                    // ROI已配置：轮询间隔精确匹配ROI帧率
+                    pollingInterval = Math.floor(1000 / appState.roiFrameRate);
+                    const updateFreq = appState.roiFrameRate;
+                    document.getElementById('chart-status').innerText =
+                        `System Active | ROI: ${appState.roiFrameRate}FPS | Data: ${updateFreq} points/sec`;
+                } else {
+                    // ROI未配置：使用默认的高频率轮询模拟数据
+                    pollingInterval = 50; // 20 FPS
+                    document.getElementById('chart-status').innerText = "System Active | Simulated: 20FPS";
+                }
+                appState.pollingIntervals.realtime = setInterval(updateRealtimeData, pollingInterval);
             } else {
                 // 停止状态：降低频率到2秒间隔
                 appState.pollingIntervals.realtime = setInterval(updateRealtimeData, 2000);
@@ -1143,6 +1211,7 @@
                 const y1 = parseInt(document.getElementById('roi-y1').value) || 0;
                 const x2 = parseInt(document.getElementById('roi-x2').value) || 0;
                 const y2 = parseInt(document.getElementById('roi-y2').value) || 0;
+                const frameRate = parseInt(document.getElementById('roi-frame-rate').value) || 2;
 
                 // 基本验证
                 if (x1 >= x2 || y1 >= y2) {
@@ -1155,17 +1224,40 @@
                     return;
                 }
 
-                // 发送API请求
-                const response = await ApiService.setRoiConfig(x1, y1, x2, y2);
-                if (response && response.success) {
-                    // 更新本地状态
-                    appState.roiConfig = response.config;
-                    appState.roiConfigured = true;
-                    updateUI();  // 更新UI状态
-                    console.log('ROI配置应用成功:', response.config);
-                } else {
-                    alert('ROI配置应用失败: ' + (response.error || '未知错误'));
+                if (frameRate < 1 || frameRate > 60) {
+                    alert('帧率无效：必须在1-60之间');
+                    return;
                 }
+
+                // 同时应用ROI配置和帧率设置
+                const [roiResponse, frameRateResponse] = await Promise.all([
+                    ApiService.setRoiConfig(x1, y1, x2, y2),
+                    ApiService.setRoiFrameRate(frameRate)
+                ]);
+
+                // 检查ROI配置结果
+                if (roiResponse && roiResponse.success) {
+                    // 更新本地状态
+                    appState.roiConfig = roiResponse.config;
+                    appState.roiConfigured = true;
+                    console.log('ROI配置应用成功:', roiResponse.config);
+                } else {
+                    alert('ROI配置应用失败: ' + (roiResponse?.error || '未知错误'));
+                    return;
+                }
+
+                // 检查帧率设置结果
+                if (frameRateResponse && frameRateResponse.success) {
+                    console.log('ROI帧率设置成功:', frameRateResponse.frame_rate);
+                    // 更新应用状态
+                    appState.roiFrameRate = frameRate;
+                    appState.roiUpdateInterval = Math.floor(1000 / frameRate);
+                    updateRoiFrameRateDisplay();
+                } else {
+                    console.warn('ROI帧率设置失败: ' + (frameRateResponse?.error || '未知错误'));
+                }
+
+                updateUI();  // 更新UI状态
             } catch (error) {
                 console.error('Apply ROI config error:', error);
                 alert('ROI配置应用失败: ' + error.message);
@@ -1194,8 +1286,64 @@
 
                     console.log('ROI配置加载成功:', response.config, '配置状态:', appState.roiConfigured);
                 }
+
+                // 加载ROI帧率设置
+                await loadRoiFrameRate();
             } catch (error) {
                 console.error('加载ROI配置失败:', error);
+            }
+        }
+
+        async function loadRoiFrameRate() {
+            try {
+                const response = await ApiService.getRoiFrameRate();
+                if (response && response.success) {
+                    document.getElementById('roi-frame-rate').value = response.frame_rate;
+                    document.getElementById('roi-fps-display').textContent = `${response.frame_rate} FPS`;
+                    // 更新应用状态
+                    appState.roiFrameRate = response.frame_rate;
+                    appState.roiUpdateInterval = Math.floor(1000 / response.frame_rate);
+                    console.log('ROI帧率加载成功:', response.frame_rate);
+                }
+            } catch (error) {
+                console.error('加载ROI帧率失败:', error);
+            }
+        }
+
+        function updateRoiFrameRateDisplay() {
+            const frameRate = parseInt(document.getElementById('roi-frame-rate').value) || 2;
+            document.getElementById('roi-fps-display').textContent = `${frameRate} FPS`;
+        }
+
+        async function applyRoiFrameRate() {
+            try {
+                const frameRate = parseInt(document.getElementById('roi-frame-rate').value) || 2;
+
+                // 验证帧率范围
+                if (frameRate < 1 || frameRate > 60) {
+                    alert('帧率无效：必须在1-60之间');
+                    return;
+                }
+
+                // 发送API请求
+                const response = await ApiService.setRoiFrameRate(frameRate);
+                if (response && response.success) {
+                    console.log('ROI帧率设置成功:', response.frame_rate);
+                    // 更新应用状态
+                    appState.roiFrameRate = frameRate;
+                    appState.roiUpdateInterval = Math.floor(1000 / frameRate);
+                    // 更新显示
+                    updateRoiFrameRateDisplay();
+                    // 如果系统正在运行，重新设置轮询间隔以应用新的帧率
+                    if (appState.detectionState === 'RUNNING' || appState.detectionState === 'PAUSED') {
+                        updatePollingInterval();
+                    }
+                } else {
+                    alert('ROI帧率设置失败: ' + (response.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Apply ROI frame rate error:', error);
+                alert('ROI帧率设置失败: ' + error.message);
             }
         }
 
@@ -1240,6 +1388,10 @@
             });
 
             document.getElementById('apply-roi-btn').addEventListener('click', applyRoiConfig);
+
+            // ROI帧率控制
+            document.getElementById('roi-frame-rate').addEventListener('input', updateRoiFrameRateDisplay);
+            document.getElementById('roi-frame-rate').addEventListener('change', applyRoiFrameRate);
 
             // 启动
             initConnection();

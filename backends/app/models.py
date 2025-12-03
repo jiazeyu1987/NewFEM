@@ -174,6 +174,15 @@ class RoiCaptureResponse(BaseModel):
     message: str = "ROI capture successful"
 
 
+class RoiFrameRateResponse(BaseModel):
+    """ROI帧率设置响应模型"""
+    type: str = "roi_frame_rate"
+    timestamp: datetime
+    frame_rate: int
+    success: bool = True
+    message: str = "ROI frame rate updated successfully"
+
+
 class AnalyzeResponse(BaseModel):
     has_hem: bool
     events: List[AnalyzeEvent]

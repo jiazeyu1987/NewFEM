@@ -20,6 +20,10 @@ class AppConfig(BaseSettings):
     buffer_size: int = 100
     max_frame_count: int = 10000
 
+    # ROI配置
+    roi_frame_rate: int = 2  # ROI截图和识别的频率 (FPS)
+    roi_update_interval: float = 0.5  # ROI更新间隔 (秒)
+
     # 安全配置
     password: str = "31415"
     enable_cors: bool = True

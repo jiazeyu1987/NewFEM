@@ -36,6 +36,7 @@ from ..models import (
     RoiConfig,
     RoiConfigResponse,
     RoiData,
+    RoiFrameRateResponse,
     StatusResponse,
     SystemStatus,
     TimeSeriesPoint,
@@ -207,15 +208,22 @@ async def realtime_data(
     if roi_configured and roi_data.format == "base64":
         # ROI已配置且有真实截图数据，使用ROI灰度值生成时间序列
         series = []
-        interval = 1.0 / 60  # 60 FPS时间间隔
+        # 使用ROI帧率来计算时间间隔，实现数据生成与ROI截图同步
+        roi_frame_rate = roi_capture_service.get_roi_frame_rate()
+        interval = 1.0 / roi_frame_rate  # 动态时间间隔，基于ROI帧率
         current_time = datetime.utcnow()
 
-        for i in range(count):
-            # 生成连续的时间点，最近的点在前
-            t = i * interval
-            # 使用ROI灰度值
-            value = roi_data.gray_value
-            series.append(TimeSeriesPoint(t=t, value=value))
+        if count == 1:
+            # 单点请求：只生成最新的数据点
+            series.append(TimeSeriesPoint(t=0.0, value=roi_data.gray_value))
+        else:
+            # 多点请求：生成连续的时间点（向后兼容）
+            for i in range(count):
+                # 生成连续的时间点，最近的点在前
+                t = i * interval
+                # 使用ROI灰度值
+                value = roi_data.gray_value
+                series.append(TimeSeriesPoint(t=t, value=value))
 
         # 更新current_value为ROI灰度值
         current_value = roi_data.gray_value
@@ -578,6 +586,69 @@ async def capture_roi(
         roi_data=roi_data,
         config=roi_config,
         message="Manual ROI capture successful (use realtime_data for automatic capture)",
+    )
+
+# ROI帧率管理端点
+@router.get("/roi/frame-rate", response_model=RoiFrameRateResponse)
+async def get_roi_frame_rate() -> RoiFrameRateResponse:
+    """获取当前ROI帧率"""
+    frame_rate = roi_capture_service.get_roi_frame_rate()
+
+    return RoiFrameRateResponse(
+        timestamp=datetime.utcnow(),
+        frame_rate=frame_rate,
+        success=True,
+        message=f"Current ROI frame rate: {frame_rate} FPS"
+    )
+
+
+@router.post("/roi/frame-rate", response_model=RoiFrameRateResponse)
+async def set_roi_frame_rate(
+    frame_rate: int = Form(...),
+    password: str = Form(...),
+) -> RoiFrameRateResponse:
+    """设置ROI帧率"""
+    verify_password(password)
+
+    logger.info("🎯 Setting ROI frame rate: %d FPS", frame_rate)
+
+    # 验证帧率范围
+    if not 1 <= frame_rate <= 60:
+        logger.error("Invalid ROI frame rate: %d (must be 1-60)", frame_rate)
+        error = ErrorResponse(
+            timestamp=datetime.utcnow(),
+            error_code="INVALID_FRAME_RATE",
+            error_message="ROI frame rate must be between 1 and 60",
+            details=ErrorDetails(
+                parameter="frame_rate",
+                value=frame_rate,
+                constraint="1 <= frame_rate <= 60"
+            )
+        )
+        return JSONResponse(status_code=400, content=error.model_dump(mode='json'))
+
+    # 设置帧率
+    success = roi_capture_service.set_roi_frame_rate(frame_rate)
+    if not success:
+        error = ErrorResponse(
+            timestamp=datetime.utcnow(),
+            error_code="FRAME_RATE_SET_FAILED",
+            error_message="Failed to set ROI frame rate",
+            details=ErrorDetails(
+                parameter="frame_rate",
+                value=frame_rate,
+                constraint="Internal error occurred"
+            )
+        )
+        return JSONResponse(status_code=500, content=error.model_dump(mode='json'))
+
+    logger.info("✅ ROI frame rate set successfully to %d FPS", frame_rate)
+
+    return RoiFrameRateResponse(
+        timestamp=datetime.utcnow(),
+        frame_rate=frame_rate,
+        success=True,
+        message=f"ROI frame rate updated to {frame_rate} FPS"
     )
 
 
