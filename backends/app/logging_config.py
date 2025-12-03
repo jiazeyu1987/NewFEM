@@ -7,6 +7,17 @@ from pathlib import Path
 _LOGGING_INITIALIZED = False
 
 
+class _SuppressRealtimeNoDataFilter(logging.Filter):
+    """Filter out noisy realtime no-data log messages."""
+
+    def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[name-defined]
+        message = record.getMessage()
+        return (
+            "Realtime data requested but no frames available - returning empty response"
+            not in message
+        )
+
+
 def init_logging() -> None:
     """
     初始化全局日志配置：
@@ -38,10 +49,13 @@ def init_logging() -> None:
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(formatter)
 
+    suppress_filter = _SuppressRealtimeNoDataFilter()
+    file_handler.addFilter(suppress_filter)
+    console_handler.addFilter(suppress_filter)
+
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG)
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
 
     _LOGGING_INITIALIZED = True
-

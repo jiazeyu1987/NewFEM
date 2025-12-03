@@ -83,7 +83,7 @@ class RoiCaptureService:
                 self._cached_roi_data = roi_data
                 self._last_roi_config = roi_config
                 self._last_capture_time = current_time
-                self._logger.info("ROI captured successfully (gray_value=%.2f)", roi_data.gray_value)
+                self._logger.debug("ROI captured successfully (gray_value=%.2f)", roi_data.gray_value)
 
                 # 集成历史存储 - 保存ROI帧到DataStore
                 try:
@@ -99,8 +99,10 @@ class RoiCaptureService:
                         capture_duration=self._cache_interval
                     )
 
-                    self._logger.info("ROI frame added to history: index=%d, gray_value=%.2f, main_frame=%d",
-                                      roi_frame.index, roi_frame.gray_value, main_frame_count)
+                    # 减少日志频率 - 每50帧记录一次，并改为debug级别
+                    if roi_frame.index % 50 == 0:
+                        self._logger.debug("ROI frame added to history: index=%d, gray_value=%.2f, main_frame=%d",
+                                           roi_frame.index, roi_frame.gray_value, main_frame_count)
 
                 except Exception as e:
                     self._logger.error("Failed to add ROI frame to history: %s", str(e))

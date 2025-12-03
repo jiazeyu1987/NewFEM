@@ -35,6 +35,9 @@ class AppConfig(BaseSettings):
     enable_cors: bool = True
     allowed_origins: Union[List[AnyHttpUrl], List[str]] = ["*"]
 
+    # 日志配置
+    log_level: str = "INFO"  # 日志级别: DEBUG, INFO, WARNING, ERROR
+
     class Config:
         env_prefix = "NEWFEM_"
         case_sensitive = False

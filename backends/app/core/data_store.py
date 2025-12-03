@@ -269,13 +269,15 @@ class DataStore:
             )
             self._roi_frames.append(roi_frame)
 
-            self._logger.info(
-                "Added ROI frame index=%d gray_value=%.2f frame_count=%d buffer_size=%d",
-                self._roi_frame_count,
-                gray_value,
-                frame_count,
-                len(self._roi_frames)
-            )
+            # 减少日志频率 - 每50帧记录一次，并改为debug级别
+            if self._roi_frame_count % 50 == 0:
+                self._logger.debug(
+                    "Added ROI frame index=%d gray_value=%.2f frame_count=%d buffer_size=%d",
+                    self._roi_frame_count,
+                    gray_value,
+                    frame_count,
+                    len(self._roi_frames)
+                )
 
             return roi_frame
 

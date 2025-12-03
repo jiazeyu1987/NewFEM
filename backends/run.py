@@ -7,11 +7,17 @@ from app.logging_config import init_logging
 
 
 def run_fastapi() -> None:
+    # 映射日志级别到uvicorn格式
+    uvicorn_log_level = settings.log_level.lower()
+    if uvicorn_log_level == "info":
+        uvicorn_log_level = "warning"  # 默认减少冗余日志
+
     uvicorn.run(
         app,
         host=settings.host,
         port=settings.api_port,
-        log_level="info",
+        log_level=uvicorn_log_level,
+        access_log=False,    # 禁用访问日志
     )
 
 
