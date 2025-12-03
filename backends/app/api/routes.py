@@ -176,17 +176,31 @@ async def realtime_data(
         baseline,
     ) = data_store.get_status_snapshot()
 
-    # 只有在ROI已配置时才返回ROI数据，否则返回空数据
+    # 只有在ROI已配置时才返回实时ROI数据，否则返回空数据
     roi_configured, roi_config = data_store.get_roi_status()
     if roi_configured:
-        # 返回已配置的ROI信息，但不生成模拟图像
-        roi_data = RoiData(
-            width=roi_config.width,
-            height=roi_config.height,
-            pixels="roi_not_captured",  # 提示需要手动截图
-            gray_value=0.0,
-            format="text",
-        )
+        # ROI已配置，实时截图
+        try:
+            roi_data = roi_capture_service.capture_roi(roi_config)
+            if roi_data is None:
+                # 截图失败时返回空数据
+                logger.warning("ROI capture failed in realtime_data, returning empty data")
+                roi_data = RoiData(
+                    width=roi_config.width,
+                    height=roi_config.height,
+                    pixels="roi_capture_failed",
+                    gray_value=0.0,
+                    format="text",
+                )
+        except Exception as e:
+            logger.error("Error capturing ROI in realtime_data: %s", str(e))
+            roi_data = RoiData(
+                width=roi_config.width,
+                height=roi_config.height,
+                pixels="roi_capture_error",
+                gray_value=0.0,
+                format="text",
+            )
     else:
         # ROI未配置，返回空数据
         roi_data = RoiData(
@@ -520,10 +534,12 @@ async def get_roi_config() -> RoiConfigResponse:
 async def capture_roi(
     password: str = Form(...),
 ) -> RoiCaptureResponse:
-    """执行ROI截图"""
+    """
+    手动执行ROI截图（已弃用，建议使用realtime_data获取实时ROI截图）
+    """
     verify_password(password)
 
-    logger.info("📸 ROI capture requested")
+    logger.info("📸 Manual ROI capture requested (deprecated)")
 
     # 获取当前ROI配置
     roi_config = data_store.get_roi_config()
@@ -534,7 +550,7 @@ async def capture_roi(
         logger.error("Failed to capture ROI")
         raise HTTPException(status_code=500, detail="ROI_CAPTURE_FAILED")
 
-    logger.info("✅ ROI captured successfully: size=%dx%d, gray=%.2f",
+    logger.info("✅ Manual ROI captured successfully: size=%dx%d, gray=%.2f",
                roi_data.width, roi_data.height, roi_data.gray_value)
 
     return RoiCaptureResponse(
@@ -542,7 +558,7 @@ async def capture_roi(
         success=True,
         roi_data=roi_data,
         config=roi_config,
-        message=f"ROI captured successfully: {roi_data.width}x{roi_data.height}",
+        message="Manual ROI capture successful (use realtime_data for automatic capture)",
     )
 
 

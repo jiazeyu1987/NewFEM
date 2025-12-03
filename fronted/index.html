@@ -347,11 +347,6 @@
                     <span>ROI 平均灰度:</span>
                     <span id="roi-gray-value" class="status-value">0.0</span>
                 </div>
-                <div class="status-row" style="width: 100%; margin-top: 10px;">
-                    <button id="roi-screenshot-btn" class="control-btn" style="width: 100%; height: 30px; font-size: 12px;" disabled>
-                        📸 截图保存
-                    </button>
-                </div>
             </div>
         </div>
 
@@ -398,7 +393,6 @@
                 </div>
                 <div class="control-group" style="margin-top: 10px;">
                     <button id="apply-roi-btn" style="width: 100%; height: 30px; font-size: 12px;">应用配置</button>
-                    <button id="capture-roi-btn" style="width: 100%; height: 30px; font-size: 12px; margin-top: 5px;">📸 ROI截图</button>
                 </div>
             </div>
         </div>
@@ -553,19 +547,6 @@
                 };
             },
 
-            // ROI相关模拟方法
-            getRoiData: function() {
-                // 生成模拟的ROI图像数据
-                const mockGrayValue = this.baseValue + (Math.random() - 0.5) * 20;
-                return {
-                    width: appState.roiConfig.width,
-                    height: appState.roiConfig.height,
-                    pixels: "mock_roi_data_" + mockGrayValue.toFixed(1),
-                    gray_value: mockGrayValue,
-                    format: "text"
-                };
-            },
-
             // 模拟控制命令响应
             control: function(command) {
                 switch(command) {
@@ -672,33 +653,6 @@
                     return await response.json();
                 } catch(e) {
                     console.error("Set ROI config error:", e);
-                    return { success: false, error: str(e) };
-                }
-            },
-
-            async captureRoi() {
-                if (appState.mockMode) {
-                    return Promise.resolve({
-                        type: "roi_capture",
-                        success: true,
-                        roi_data: MockServer.getRoiData(),
-                        config: appState.roiConfig,
-                        message: "ROI captured successfully"
-                    });
-                }
-                const formData = new URLSearchParams();
-                formData.append('password', '31415');
-
-                try {
-                    const response = await fetch(`${appState.serverUrl}/roi/capture`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: formData
-                    });
-                    if (!response.ok) throw new Error('Network response was not ok');
-                    return await response.json();
-                } catch(e) {
-                    console.error("ROI capture error:", e);
                     return { success: false, error: str(e) };
                 }
             }
@@ -874,9 +828,12 @@
                 } else if (roiData.pixels === 'roi_not_configured') {
                     // ROI未配置
                     this.drawPlaceholder("请先配置ROI区域");
-                } else if (roiData.pixels === 'roi_not_captured') {
-                    // ROI已配置但未截图
-                    this.drawPlaceholder("请点击ROI截图按钮");
+                } else if (roiData.pixels === 'roi_capture_failed') {
+                    // ROI截图失败
+                    this.drawPlaceholder("ROI截图失败");
+                } else if (roiData.pixels === 'roi_capture_error') {
+                    // ROI截图错误
+                    this.drawPlaceholder("ROI截图错误");
                 } else {
                     // 其他文本格式数据
                     this.drawPlaceholder("ROI数据格式: " + roiData.pixels);
@@ -915,57 +872,7 @@
         const chartRenderer = new WaveformChart('waveform-chart');
         const roiRenderer = new RoiRenderer('roi-canvas');
 
-        // ROI截图功能
-        const roiScreenshotBtn = document.getElementById('roi-screenshot-btn');
-
-        function captureROIScreenshot() {
-            const canvas = document.getElementById('roi-canvas');
-            if (!canvas || !appState.roiData) {
-                alert('ROI数据不可用，无法截图');
-                return;
-            }
-
-            // 将Canvas转换为Blob
-            canvas.toBlob(function(blob) {
-                if (!blob) {
-                    alert('截图生成失败');
-                    return;
-                }
-
-                // 生成包含时间戳和信号值的文件名
-                const now = new Date();
-                const timestamp = now.getFullYear() +
-                    String(now.getMonth() + 1).padStart(2, '0') +
-                    String(now.getDate()).padStart(2, '0') + '_' +
-                    String(now.getHours()).padStart(2, '0') +
-                    String(now.getMinutes()).padStart(2, '0') +
-                    String(now.getSeconds()).padStart(2, '0');
-
-                const signalValue = appState.roiData.gray_value.toFixed(1);
-                const filename = `ROI_Screenshot_${timestamp}_Signal${signalValue}.png`;
-
-                // 创建下载链接
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = filename;
-                link.style.display = 'none';
-
-                // 触发下载
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-
-                // 清理URL对象
-                URL.revokeObjectURL(url);
-
-                console.log(`ROI截图已保存: ${filename}`);
-            }, 'image/png');
-        }
-
-        // 绑定截图按钮点击事件
-        roiScreenshotBtn.addEventListener('click', captureROIScreenshot);
-
+        
         // 更新 UI 元素
         function updateUI() {
             // 连接状态
@@ -1012,11 +919,6 @@
             // ROI数据
             if (appState.roiData) {
                 document.getElementById('roi-gray-value').innerText = appState.roiData.gray_value.toFixed(2);
-                roiScreenshotBtn.disabled = false;
-                roiScreenshotBtn.textContent = '📸 截图保存';
-            } else {
-                roiScreenshotBtn.disabled = true;
-                roiScreenshotBtn.textContent = '📸 截图保存 (无数据)';
             }
 
             // 检测状态
@@ -1213,65 +1115,7 @@
             }
         }
 
-        async function captureRoiScreenshot() {
-            try {
-                const captureBtn = document.getElementById('capture-roi-btn');
-                captureBtn.disabled = true;
-                captureBtn.textContent = '📸 截图中...';
-
-                const response = await ApiService.captureRoi();
-                if (response && response.success) {
-                    // 更新ROI显示
-                    if (response.roi_data) {
-                        roiRenderer.render(response.roi_data);
-                        document.getElementById('roi-gray-value').textContent = response.roi_data.gray_value.toFixed(1);
-                    }
-                    console.log('ROI截图成功:', response.message);
-
-                    // 可选：下载截图
-                    if (response.roi_data && response.roi_data.format === 'base64') {
-                        downloadRoiImage(response.roi_data.pixels, 'roi_capture.png');
-                    }
-                } else {
-                    alert('ROI截图失败: ' + (response.error || '未知错误'));
-                }
-            } catch (error) {
-                console.error('ROI capture error:', error);
-                alert('ROI截图失败: ' + error.message);
-            } finally {
-                const captureBtn = document.getElementById('capture-roi-btn');
-                captureBtn.disabled = false;
-                captureBtn.textContent = '📸 ROI截图';
-            }
-        }
-
-        function downloadRoiImage(base64Data, filename) {
-            try {
-                // 将hex字符串转换为base64
-                const binaryString = hexToBase64(base64Data);
-                const blob = new Blob([binaryString], { type: 'image/png' });
-                const url = URL.createObjectURL(blob);
-
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-
-                console.log('ROI图像已下载:', filename);
-            } catch (error) {
-                console.error('下载ROI图像失败:', error);
-            }
-        }
-
-        function hexToBase64(hexString) {
-            const hexPairs = hexString.match(/[\da-f]{2}/gi) || [];
-            const bytes = new Uint8Array(hexPairs.map(pair => parseInt(pair, 16)));
-            return bytes;
-        }
-
+        
         async function loadRoiConfig() {
             try {
                 const response = await ApiService.getRoiConfig();
@@ -1339,7 +1183,6 @@
             });
 
             document.getElementById('apply-roi-btn').addEventListener('click', applyRoiConfig);
-            document.getElementById('capture-roi-btn').addEventListener('click', captureRoiScreenshot);
 
             // 启动
             initConnection();
