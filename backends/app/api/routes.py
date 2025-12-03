@@ -49,7 +49,7 @@ from ..models import (
 from ..core.data_store import data_store
 from ..core.processor import processor
 from ..core.roi_capture import roi_capture_service
-from ..utils import create_roi_data_with_image
+from ..utils import create_roi_data_with_image, generate_waveform_image_with_peaks
 from ..peak_detection import detect_peaks
 
 
@@ -1038,6 +1038,96 @@ async def roi_window_capture_with_peaks(
         peak_detection_results=peak_detection_results,
         peak_detection_params=peak_detection_params
     )
+
+
+# 生成带有波峰标注的波形图像端点
+@router.get("/data/waveform-with-peaks")
+async def waveform_with_peaks(
+    count: int = Query(100, ge=10, le=500, description="波形数据点数：10-500"),
+    threshold: float = Query(105.0, ge=50.0, le=255.0, description="波峰检测阈值：50-255"),
+    margin_frames: int = Query(5, ge=1, le=20, description="边界扩展帧数：1-20"),
+    difference_threshold: float = Query(2.1, ge=0.1, le=10.0, description="帧差值阈值：0.1-10.0")
+):
+    """生成带有波峰标注的波形图像"""
+    logger.info("🎨 Waveform with peaks image requested: count=%d, threshold=%.1f", count, threshold)
+
+    # 获取ROI历史数据
+    roi_frames = data_store.get_roi_series(count)
+    if not roi_frames:
+        # 如果没有ROI数据，使用模拟数据
+        import numpy as np
+        time_points = np.linspace(0, 10, count)
+        # 生成模拟波形：基线 + 噪声 + 几个波峰
+        baseline = 100
+        noise = np.random.normal(0, 5, count)
+
+        # 添加几个模拟波峰
+        signal = np.ones(count) * baseline + noise
+        # 添加绿色波峰（较强的）
+        for peak_pos in [30, 60, 85]:
+            if peak_pos < count:
+                peak_width = 5
+                for i in range(max(0, peak_pos - peak_width), min(count, peak_pos + peak_width + 1)):
+                    signal[i] += 40 * np.exp(-((i - peak_pos) ** 2) / 8)
+
+        # 添加红色波峰（较弱的）
+        for peak_pos in [20, 45, 75]:
+            if peak_pos < count:
+                peak_width = 3
+                for i in range(max(0, peak_pos - peak_width), min(count, peak_pos + peak_width + 1)):
+                    signal[i] += 25 * np.exp(-((i - peak_pos) ** 2) / 6)
+
+        curve_data = signal.tolist()
+    else:
+        # 使用真实ROI数据
+        curve_data = [frame.gray_value for frame in roi_frames]
+
+    # 执行波峰检测
+    green_peaks, red_peaks = detect_peaks(
+        curve=curve_data,
+        threshold=threshold,
+        marginFrames=margin_frames,
+        differenceThreshold=difference_threshold
+    )
+
+    # 生成带有波峰标注的波形图像
+    try:
+        waveform_image = generate_waveform_image_with_peaks(
+            curve_data=curve_data,
+            green_peaks=green_peaks,
+            red_peaks=red_peaks,
+            width=600,
+            height=300
+        )
+
+        logger.info("✅ Waveform with peaks image generated successfully: green=%d, red=%d",
+                   len(green_peaks), len(red_peaks))
+
+        return {
+            "success": True,
+            "timestamp": datetime.utcnow().isoformat(),
+            "image_data": waveform_image,
+            "metadata": {
+                "data_points": len(curve_data),
+                "green_peaks": len(green_peaks),
+                "red_peaks": len(red_peaks),
+                "total_peaks": len(green_peaks) + len(red_peaks),
+                "detection_params": {
+                    "threshold": threshold,
+                    "margin_frames": margin_frames,
+                    "difference_threshold": difference_threshold
+                },
+                "data_range": {
+                    "min": min(curve_data) if curve_data else 0,
+                    "max": max(curve_data) if curve_data else 0,
+                    "avg": sum(curve_data) / len(curve_data) if curve_data else 0
+                }
+            }
+        }
+
+    except Exception as e:
+        logger.error("Error generating waveform image: %s", str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to generate waveform image: {str(e)}")
 
 
 app = create_app()
