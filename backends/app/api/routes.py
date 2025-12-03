@@ -40,6 +40,7 @@ from ..models import (
     RoiFrameRateResponse,
     RoiTimeSeriesPoint,
     RoiWindowCaptureResponse,
+    RoiWindowCaptureWithPeaksResponse,
     StatusResponse,
     SystemStatus,
     TimeSeriesPoint,
@@ -49,6 +50,7 @@ from ..core.data_store import data_store
 from ..core.processor import processor
 from ..core.roi_capture import roi_capture_service
 from ..utils import create_roi_data_with_image
+from ..peak_detection import detect_peaks
 
 
 router = APIRouter()
@@ -902,6 +904,139 @@ async def roi_window_capture(
         series=series,
         roi_config=roi_config_dict,
         capture_metadata=capture_metadata
+    )
+
+
+# ROI窗口截取带波峰检测端点
+@router.get("/data/roi-window-capture-with-peaks", response_model=RoiWindowCaptureWithPeaksResponse)
+async def roi_window_capture_with_peaks(
+    count: int = Query(100, ge=50, le=500, description="ROI窗口大小：50-500帧"),
+    threshold: float = Query(105.0, ge=0.0, le=255.0, description="波峰检测阈值：0-255"),
+    margin_frames: int = Query(5, ge=1, le=20, description="边界扩展帧数：1-20"),
+    difference_threshold: float = Query(0.5, ge=0.1, le=10.0, description="帧差值阈值：0.1-10.0")
+) -> RoiWindowCaptureWithPeaksResponse:
+    """截取指定帧数的ROI灰度分析历史数据窗口并进行波峰检测分析"""
+    logger.info("🔍 ROI window capture with peak detection requested: count=%d, threshold=%.1f, margin=%d, diff=%.2f",
+                count, threshold, margin_frames, difference_threshold)
+
+    # 从数据存储中获取指定数量的ROI历史帧
+    roi_frames = data_store.get_roi_series(count)
+    if not roi_frames:
+        logger.warning("ROI window capture with peaks failed: no ROI data available")
+        raise HTTPException(status_code=404, detail="No ROI data available for capture")
+
+    # 获取当前状态信息
+    _, current_main_frame_count, _, _, _, _ = data_store.get_status_snapshot()
+    roi_count, roi_buffer_size, last_gray_value, last_main_frame_count = data_store.get_roi_status_snapshot()
+
+    # 计算帧范围
+    roi_start_frame = max(0, roi_count - len(roi_frames))
+    roi_end_frame = roi_count - 1
+
+    # 转换为RoiTimeSeriesPoint格式
+    series = []
+    gray_values = []  # 用于波峰检测的灰度值列表
+    for roi_frame in roi_frames:
+        gray_values.append(roi_frame.gray_value)
+        series.append(RoiTimeSeriesPoint(
+            t=(roi_frame.timestamp - roi_frames[0].timestamp).total_seconds(),
+            gray_value=roi_frame.gray_value,
+            roi_index=roi_frame.index
+        ))
+
+    # 构建ROI配置信息
+    roi_config = roi_frames[0].roi_config
+    roi_config_dict = {
+        "x1": roi_config.x1,
+        "y1": roi_config.y1,
+        "x2": roi_config.x2,
+        "y2": roi_config.y2,
+        "width": roi_config.width,
+        "height": roi_config.height,
+        "center_x": roi_config.center_x,
+        "center_y": roi_config.center_y
+    }
+
+    # 构建元数据
+    capture_metadata = {
+        "roi_start_frame": roi_start_frame,
+        "roi_end_frame": roi_end_frame,
+        "actual_roi_frame_count": len(roi_frames),
+        "main_frame_start": roi_frames[0].frame_count if roi_frames else 0,
+        "main_frame_end": roi_frames[-1].frame_count if roi_frames else 0,
+        "capture_duration": (roi_frames[-1].timestamp - roi_frames[0].timestamp).total_seconds() if len(roi_frames) > 1 else 0.0,
+        "current_roi_frame_count": roi_count,
+        "current_main_frame_count": current_main_frame_count,
+        "roi_buffer_size": roi_buffer_size,
+        "last_gray_value": last_gray_value
+    }
+
+    # 获取ROI帧率信息
+    actual_fps, available_frames = data_store.get_roi_frame_rate_info()
+    capture_metadata["actual_roi_fps"] = actual_fps
+    capture_metadata["available_roi_frames"] = available_frames
+
+    # 执行波峰检测
+    logger.info("🎯 Starting peak detection on %d ROI frames with threshold=%.1f", len(gray_values), threshold)
+    print(f"\n=== ROI窗口波峰检测开始 ===")
+    print(f"窗口大小: {len(gray_values)} 帧")
+    print(f"检测参数: 阈值={threshold}, 边界={margin_frames}, 差值阈值={difference_threshold}")
+
+    try:
+        green_peaks, red_peaks = detect_peaks(
+            curve=gray_values,
+            threshold=threshold,
+            marginFrames=margin_frames,
+            differenceThreshold=difference_threshold
+        )
+
+        # 波峰检测结果
+        peak_detection_results = {
+            "green_peaks": green_peaks,
+            "red_peaks": red_peaks,
+            "total_peaks": len(green_peaks) + len(red_peaks),
+            "green_peak_count": len(green_peaks),
+            "red_peak_count": len(red_peaks)
+        }
+
+        # 波峰检测参数
+        peak_detection_params = {
+            "threshold": threshold,
+            "margin_frames": margin_frames,
+            "difference_threshold": difference_threshold,
+            "data_points": len(gray_values)
+        }
+
+        print(f"✅ 波峰检测完成:")
+        print(f"   - 绿色波峰 (稳定): {len(green_peaks)} 个: {green_peaks}")
+        print(f"   - 红色波峰 (不稳定): {len(red_peaks)} 个: {red_peaks}")
+        print(f"   - 总计: {len(green_peaks) + len(red_peaks)} 个波峰")
+        print(f"=== ROI窗口波峰检测结束 ===\n")
+
+        logger.info("✅ ROI window peak detection completed: green=%d, red=%d, total=%d",
+                    len(green_peaks), len(red_peaks), len(green_peaks) + len(red_peaks))
+
+    except Exception as e:
+        logger.error("❌ Peak detection failed: %s", str(e))
+        print(f"❌ 波峰检测失败: {str(e)}")
+        peak_detection_results = {"error": str(e)}
+        peak_detection_params = {"error": True}
+
+    logger.info("✅ ROI window capture with peaks successful: frames=%d, roi_range=(%d,%d), main_range=(%d,%d), duration=%.3fs",
+               len(series), roi_start_frame, roi_end_frame,
+               capture_metadata["main_frame_start"], capture_metadata["main_frame_end"],
+               capture_metadata["capture_duration"])
+
+    return RoiWindowCaptureWithPeaksResponse(
+        timestamp=datetime.utcnow(),
+        window_size=count,
+        roi_frame_range=(roi_start_frame, roi_end_frame),
+        main_frame_range=(capture_metadata["main_frame_start"], capture_metadata["main_frame_end"]),
+        series=series,
+        roi_config=roi_config_dict,
+        capture_metadata=capture_metadata,
+        peak_detection_results=peak_detection_results,
+        peak_detection_params=peak_detection_params
     )
 
 

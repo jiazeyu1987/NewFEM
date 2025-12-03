@@ -250,6 +250,24 @@ class RoiWindowCaptureResponse(BaseModel):
     message: str = "ROI window data captured successfully"
 
 
+class RoiWindowCaptureWithPeaksResponse(BaseModel):
+    """ROI窗口截取带波峰检测响应模型"""
+    type: str = "roi_window_capture_with_peaks"
+    timestamp: datetime
+    window_size: int
+    roi_frame_range: Tuple[int, int]
+    main_frame_range: Tuple[int, int]
+    series: List[RoiTimeSeriesPoint]
+    roi_config: Dict[str, Any]
+    capture_metadata: Dict[str, Any] = Field(default_factory=dict)
+    # 波峰检测结果
+    peak_detection_results: Dict[str, Any] = Field(default_factory=dict)
+    # 波峰检测参数
+    peak_detection_params: Dict[str, Any] = Field(default_factory=dict)
+    success: bool = True
+    message: str = "ROI window data captured with peak detection analysis"
+
+
 class AnalyzeResponse(BaseModel):
     has_hem: bool
     events: List[AnalyzeEvent]
