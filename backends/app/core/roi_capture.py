@@ -6,6 +6,7 @@ ROI截图服务模块
 import base64
 import io
 import logging
+import time
 from typing import Optional, Tuple
 
 # 启用PIL导入
@@ -19,6 +20,13 @@ class RoiCaptureService:
 
     def __init__(self):
         self._logger = logging.getLogger(self.__class__.__name__)
+        # ROI截图缓存机制
+        self._cache_interval = 0.5  # 500ms缓存间隔
+        self._last_capture_time = 0.0
+        self._cached_roi_data: Optional[RoiData] = None
+        self._last_roi_config: Optional[RoiConfig] = None
+        self._last_gray_value: float = 0.0  # 用于内容变化检测
+        self._content_change_threshold = 2.0  # 灰度值变化阈值
 
     def capture_screen(self) -> Optional[Image.Image]:
         """
@@ -37,7 +45,7 @@ class RoiCaptureService:
 
     def capture_roi(self, roi_config: RoiConfig) -> Optional[RoiData]:
         """
-        截取指定ROI区域
+        截取指定ROI区域（带缓存机制）
 
         Args:
             roi_config: ROI配置
@@ -46,75 +54,110 @@ class RoiCaptureService:
             RoiData: ROI数据，失败返回None
         """
         try:
-            # 首先截取整个屏幕
-            screen = self.capture_screen()
-            if screen is None:
-                self._logger.error("Failed to capture screen for ROI")
-                return None
-
             # 验证ROI坐标
             if not roi_config.validate_coordinates():
                 self._logger.error("Invalid ROI coordinates: %s", roi_config)
                 return None
 
-            # 检查ROI是否在屏幕范围内
-            screen_width, screen_height = screen.size
-            if (roi_config.x2 > screen_width or roi_config.y2 > screen_height or
-                roi_config.x1 < 0 or roi_config.y1 < 0):
-                self._logger.warning(
-                    "ROI coordinates exceed screen bounds. Screen: %dx%d, ROI: (%d,%d)->(%d,%d)",
-                    screen_width, screen_height,
-                    roi_config.x1, roi_config.y1, roi_config.x2, roi_config.y2
-                )
-                # 自动调整到屏幕范围内
-                x1 = max(0, min(roi_config.x1, screen_width - 1))
-                y1 = max(0, min(roi_config.y1, screen_height - 1))
-                x2 = max(x1 + 1, min(roi_config.x2, screen_width))
-                y2 = max(y1 + 1, min(roi_config.y2, screen_height))
-            else:
-                x1, y1, x2, y2 = roi_config.x1, roi_config.y1, roi_config.x2, roi_config.y2
+            current_time = time.time()
 
-            # 截取ROI区域
-            roi_image = screen.crop((x1, y1, x2, y2))
+            # 检查是否可以使用缓存（时间和配置未变化）
+            time_valid = current_time - self._last_capture_time < self._cache_interval
+            config_unchanged = (self._last_roi_config is not None and
+                               self._roi_config_changed(roi_config, self._last_roi_config) == False)
 
-            # 计算ROI平均灰度值
-            gray_roi = roi_image.convert('L')
-            # 简化计算：使用PIL的直方图来计算平均值
-            histogram = gray_roi.histogram()
-            total_pixels = roi_config.width * roi_config.height
-            total_sum = sum(i * count for i, count in enumerate(histogram))
-            average_gray = float(total_sum / total_pixels) if total_pixels > 0 else 0.0
+            if (self._cached_roi_data is not None and time_valid and config_unchanged):
+                # 检查内容是否有显著变化
+                if self._cached_roi_data and abs(self._cached_roi_data.gray_value - self._last_gray_value) < self._content_change_threshold:
+                    self._logger.debug("Using cached ROI data (no significant content change)")
+                    return self._cached_roi_data
+                else:
+                    self._logger.debug("Content changed significantly, forcing new capture")
 
-            # 调整ROI图像大小到标准尺寸（200x150）
-            try:
-                roi_resized = roi_image.resize((200, 150), Image.Resampling.LANCZOS)
-            except AttributeError:
-                # 兼容旧版本PIL
-                roi_resized = roi_image.resize((200, 150), Image.LANCZOS)
+            # 执行真实的截图操作
+            roi_data = self._capture_roi_internal(roi_config)
 
-            # 转换为base64
-            buffer = io.BytesIO()
-            roi_resized.save(buffer, format='PNG')
-            roi_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-
-            roi_data = RoiData(
-                width=roi_config.width,
-                height=roi_config.height,
-                pixels=f"data:image/png;base64,{roi_base64}",
-                gray_value=average_gray,
-                format="base64"
-            )
-
-            self._logger.debug(
-                "ROI captured successfully: size=%dx%d, gray_value=%.2f, base64_length=%d",
-                roi_config.width, roi_config.height, average_gray, len(roi_base64)
-            )
+            # 更新缓存和状态
+            if roi_data is not None:
+                self._cached_roi_data = roi_data
+                self._last_roi_config = roi_config
+                self._last_capture_time = current_time
+                self._last_gray_value = roi_data.gray_value
+                self._logger.debug("ROI captured and cached (gray_value=%.2f)", roi_data.gray_value)
 
             return roi_data
 
         except Exception as e:
             self._logger.error("Failed to capture ROI: %s", str(e))
             return None
+
+    def _roi_config_changed(self, current: RoiConfig, cached: RoiConfig) -> bool:
+        """检查ROI配置是否发生变化"""
+        return (current.x1 != cached.x1 or current.y1 != cached.y1 or
+                current.x2 != cached.x2 or current.y2 != cached.y2)
+
+    def _capture_roi_internal(self, roi_config: RoiConfig) -> Optional[RoiData]:
+        """执行实际的ROI截图操作"""
+        # 首先截取整个屏幕
+        screen = self.capture_screen()
+        if screen is None:
+            self._logger.error("Failed to capture screen for ROI")
+            return None
+
+        # 检查ROI是否在屏幕范围内
+        screen_width, screen_height = screen.size
+        if (roi_config.x2 > screen_width or roi_config.y2 > screen_height or
+            roi_config.x1 < 0 or roi_config.y1 < 0):
+            self._logger.warning(
+                "ROI coordinates exceed screen bounds. Screen: %dx%d, ROI: (%d,%d)->(%d,%d)",
+                screen_width, screen_height,
+                roi_config.x1, roi_config.y1, roi_config.x2, roi_config.y2
+            )
+            # 自动调整到屏幕范围内
+            x1 = max(0, min(roi_config.x1, screen_width - 1))
+            y1 = max(0, min(roi_config.y1, screen_height - 1))
+            x2 = max(x1 + 1, min(roi_config.x2, screen_width))
+            y2 = max(y1 + 1, min(roi_config.y2, screen_height))
+        else:
+            x1, y1, x2, y2 = roi_config.x1, roi_config.y1, roi_config.x2, roi_config.y2
+
+        # 截取ROI区域
+        roi_image = screen.crop((x1, y1, x2, y2))
+
+        # 计算ROI平均灰度值
+        gray_roi = roi_image.convert('L')
+        # 简化计算：使用PIL的直方图来计算平均值
+        histogram = gray_roi.histogram()
+        total_pixels = roi_config.width * roi_config.height
+        total_sum = sum(i * count for i, count in enumerate(histogram))
+        average_gray = float(total_sum / total_pixels) if total_pixels > 0 else 0.0
+
+        # 调整ROI图像大小到标准尺寸（200x150）
+        try:
+            roi_resized = roi_image.resize((200, 150), Image.Resampling.LANCZOS)
+        except AttributeError:
+            # 兼容旧版本PIL
+            roi_resized = roi_image.resize((200, 150), Image.LANCZOS)
+
+        # 转换为base64
+        buffer = io.BytesIO()
+        roi_resized.save(buffer, format='PNG')
+        roi_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+        roi_data = RoiData(
+            width=roi_config.width,
+            height=roi_config.height,
+            pixels=f"data:image/png;base64,{roi_base64}",
+            gray_value=average_gray,
+            format="base64"
+        )
+
+        self._logger.debug(
+            "ROI captured successfully: size=%dx%d, gray_value=%.2f, base64_length=%d",
+            roi_config.width, roi_config.height, average_gray, len(roi_base64)
+        )
+
+        return roi_data
 
     def get_screen_resolution(self) -> Tuple[int, int]:
         """

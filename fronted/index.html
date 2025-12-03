@@ -469,6 +469,9 @@
                 height: 150
             },
             roiConfigured: false,  // ROI是否已由用户配置
+            // ROI更新频率控制
+            roiUpdateInterval: 500,  // ROI更新间隔（毫秒）
+            lastRoiUpdate: 0,        // 上次ROI更新时间
             // 内部使用的配置
             maxDataPoints: 100,
             pollingIntervals: {
@@ -804,14 +807,20 @@
             constructor(canvasId) {
                 this.canvas = document.getElementById(canvasId);
                 this.ctx = this.canvas.getContext('2d');
+
+                // 创建离屏Canvas用于双缓冲
+                this.offscreenCanvas = document.createElement('canvas');
+                this.offscreenCanvas.width = 200;
+                this.offscreenCanvas.height = 150;
+                this.offscreenCtx = this.offscreenCanvas.getContext('2d');
+
+                // 图像预加载
+                this.preloadedImage = null;
+                this.isLoading = false;
             }
 
             render(roiData) {
-                // 清空
-                this.ctx.clearRect(0, 0, 200, 150);
-
                 if (!roiData) {
-                    // 无ROI数据时显示提示
                     this.drawPlaceholder("ROI数据未初始化");
                     return;
                 }
@@ -819,41 +828,83 @@
                 if (appState.mockMode && roiData.raw) {
                     // Mock模式下直接绘制生成的像素数据
                     const imgData = new ImageData(roiData.raw, 200, 150);
-                    this.ctx.putImageData(imgData, 0, 0);
+                    this.offscreenCtx.putImageData(imgData, 0, 0);
+                    this.copyToMainCanvas();
                 } else if (roiData.format === 'base64') {
-                    // 显示真实的base64图像
-                    const img = new Image();
-                    img.onload = () => this.ctx.drawImage(img, 0, 0, 200, 150);
-                    img.src = roiData.pixels;
+                    // 预加载图像，避免闪烁
+                    this.preloadAndRender(roiData.pixels);
                 } else if (roiData.pixels === 'roi_not_configured') {
-                    // ROI未配置
                     this.drawPlaceholder("请先配置ROI区域");
                 } else if (roiData.pixels === 'roi_capture_failed') {
-                    // ROI截图失败
                     this.drawPlaceholder("ROI截图失败");
                 } else if (roiData.pixels === 'roi_capture_error') {
-                    // ROI截图错误
                     this.drawPlaceholder("ROI截图错误");
                 } else {
-                    // 其他文本格式数据
                     this.drawPlaceholder("ROI数据格式: " + roiData.pixels);
                 }
             }
 
+            preloadAndRender(imageSrc) {
+                // 避免重复加载相同图像
+                if (this.preloadedImage && this.preloadedImage.src === imageSrc) {
+                    return;
+                }
+
+                if (this.isLoading) {
+                    return; // 如果正在加载，跳过
+                }
+
+                this.isLoading = true;
+                const img = new Image();
+
+                img.onload = () => {
+                    // 清空离屏Canvas
+                    this.offscreenCtx.clearRect(0, 0, 200, 150);
+                    // 绘制图像到离屏Canvas
+                    this.offscreenCtx.drawImage(img, 0, 0, 200, 150);
+                    // 一次性复制到主Canvas
+                    this.copyToMainCanvas();
+                    // 缓存图像
+                    this.preloadedImage = img;
+                    this.isLoading = false;
+                };
+
+                img.onerror = () => {
+                    this.isLoading = false;
+                    this.drawPlaceholder("图像加载失败");
+                };
+
+                img.src = imageSrc;
+            }
+
+            copyToMainCanvas() {
+                // 清空主Canvas
+                this.ctx.clearRect(0, 0, 200, 150);
+                // 一次性复制离屏Canvas内容到主Canvas
+                this.ctx.drawImage(this.offscreenCanvas, 0, 0);
+            }
+
             drawPlaceholder(message) {
+                // 直接在离屏Canvas上绘制
+                this.drawPlaceholderToCanvas(this.offscreenCtx, message);
+                // 复制到主Canvas
+                this.copyToMainCanvas();
+            }
+
+            drawPlaceholderToCanvas(ctx, message) {
                 // 绘制背景
-                this.ctx.fillStyle = '#2d2d30';
-                this.ctx.fillRect(0, 0, 200, 150);
+                ctx.fillStyle = '#2d2d30';
+                ctx.fillRect(0, 0, 200, 150);
 
                 // 绘制边框
-                this.ctx.strokeStyle = '#3e3e42';
-                this.ctx.strokeRect(0, 0, 200, 150);
+                ctx.strokeStyle = '#3e3e42';
+                ctx.strokeRect(0, 0, 200, 150);
 
                 // 绘制文字
-                this.ctx.fillStyle = '#cccccc';
-                this.ctx.font = '12px Arial';
-                this.ctx.textAlign = 'center';
-                this.ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#cccccc';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
 
                 // 多行文字处理
                 const lines = message.split(' ');
@@ -861,7 +912,7 @@
                 const startY = 75 - (lines.length - 1) * lineHeight / 2;
 
                 lines.forEach((line, index) => {
-                    this.ctx.fillText(line, 100, startY + index * lineHeight);
+                    ctx.fillText(line, 100, startY + index * lineHeight);
                 });
             }
         }
@@ -984,7 +1035,13 @@
                 appState.frameCount = data.frame_count;
                 appState.peakSignal = data.peak_signal;
                 appState.baseline = data.baseline;
-                appState.roiData = data.roi_data;
+
+                // 控制ROI更新频率 - 降低到2 FPS，减少闪烁
+                const now = Date.now();
+                if (now - appState.lastRoiUpdate > appState.roiUpdateInterval) {
+                    appState.roiData = data.roi_data;
+                    appState.lastRoiUpdate = now;
+                }
 
                 if (data.series && data.series.length > 0) {
                     const latest = data.series[data.series.length - 1];
