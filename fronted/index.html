@@ -264,341 +264,6 @@
             border-color: var(--error-color);
         }
 
-        /* --- 诊断面板样式 --- */
-        .diagnostic-tabs {
-            display: flex;
-            background-color: var(--panel-header-bg);
-            border-bottom: 1px solid var(--border-color);
-            padding: 0;
-        }
-
-        .tab-button {
-            background: none;
-            border: none;
-            color: var(--text-color);
-            padding: 10px 20px;
-            cursor: pointer;
-            font-size: 13px;
-            border-bottom: 2px solid transparent;
-            transition: all 0.2s ease;
-        }
-
-        .tab-button:hover {
-            background-color: var(--button-hover);
-            color: var(--text-highlight);
-        }
-
-        .tab-button.active {
-            background-color: var(--accent-color);
-            border-bottom-color: var(--accent-color);
-            color: white;
-        }
-
-        .tab-content {
-            display: none;
-            height: calc(100vh - 40px);
-            overflow-y: auto;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
-        .diagnostic-container {
-            padding: 20px;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            height: 100%;
-        }
-
-        .diagnostic-section {
-            background-color: var(--input-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            padding: 15px;
-            grid-column: span 1;
-        }
-
-        .diagnostic-section.full-width {
-            grid-column: span 2;
-        }
-
-        .diagnostic-section h3 {
-            margin: 0 0 15px 0;
-            color: var(--text-highlight);
-            font-size: 14px;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 8px;
-        }
-
-        .status-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-
-        .status-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 5px 0;
-            border-bottom: 1px solid var(--grid-color);
-        }
-
-        .status-item:last-child {
-            border-bottom: none;
-        }
-
-        .status-item label {
-            font-size: 12px;
-            color: var(--text-color);
-        }
-
-        .status-value {
-            font-weight: bold;
-            font-size: 12px;
-            color: var(--text-highlight);
-            font-family: 'Courier New', monospace;
-        }
-
-        .window-analysis {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        #slope-chart {
-            background-color: var(--bg-color);
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            width: 100%;
-            max-width: 400px;
-        }
-
-        .window-legend {
-            display: flex;
-            gap: 15px;
-            flex-wrap: wrap;
-        }
-
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            font-size: 12px;
-        }
-
-        .legend-color {
-            width: 12px;
-            height: 12px;
-            border-radius: 2px;
-        }
-
-        .failure-reasons {
-            max-height: 200px;
-            overflow-y: auto;
-        }
-
-        .failure-list {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .failure-item {
-            background-color: var(--bg-color);
-            border-left: 3px solid var(--error-color);
-            padding: 8px 12px;
-            border-radius: 0 4px 4px 0;
-            font-size: 12px;
-        }
-
-        .no-failures {
-            text-align: center;
-            color: var(--text-color);
-            font-style: italic;
-            padding: 20px;
-        }
-
-        .waveform-results {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-
-        .result-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px;
-            background-color: var(--bg-color);
-            border-radius: 4px;
-            border: 1px solid var(--grid-color);
-        }
-
-        .result-item label {
-            font-size: 12px;
-            color: var(--text-color);
-        }
-
-        .result-value {
-            font-weight: bold;
-            font-size: 12px;
-            color: var(--success-color);
-            font-family: 'Courier New', monospace;
-        }
-
-        .logs-container {
-            height: calc(100vh - 80px);
-            display: flex;
-            flex-direction: column;
-        }
-
-        .log-filters {
-            display: flex;
-            gap: 15px;
-            padding: 15px;
-            background-color: var(--panel-header-bg);
-            border-bottom: 1px solid var(--border-color);
-            align-items: center;
-            flex-wrap: wrap;
-        }
-
-        .filter-group {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .filter-group label {
-            font-size: 12px;
-            color: var(--text-color);
-            min-width: 40px;
-        }
-
-        .filter-group select,
-        .filter-group input {
-            padding: 4px 8px;
-            background-color: var(--input-bg);
-            border: 1px solid var(--border-color);
-            color: var(--text-color);
-            border-radius: 3px;
-            font-size: 12px;
-        }
-
-        .clear-logs-btn {
-            padding: 4px 12px;
-            background-color: var(--error-color);
-            border: none;
-            color: white;
-            border-radius: 3px;
-            font-size: 12px;
-            cursor: pointer;
-        }
-
-        .clear-logs-btn:hover {
-            background-color: #e74c3c;
-        }
-
-        .log-display {
-            flex: 1;
-            overflow-y: auto;
-            padding: 10px;
-            font-family: 'Courier New', monospace;
-            font-size: 11px;
-            line-height: 1.4;
-        }
-
-        .log-entry {
-            margin-bottom: 2px;
-            padding: 4px 8px;
-            border-radius: 3px;
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
-        }
-
-        .log-entry.DEBUG {
-            background-color: rgba(255, 255, 255, 0.05);
-            border-left: 3px solid #6c757d;
-        }
-
-        .log-entry.INFO {
-            background-color: rgba(78, 201, 176, 0.1);
-            border-left: 3px solid var(--success-color);
-        }
-
-        .log-entry.WARNING {
-            background-color: rgba(220, 220, 170, 0.1);
-            border-left: 3px solid var(--warning-color);
-        }
-
-        .log-entry.ERROR {
-            background-color: rgba(244, 135, 113, 0.1);
-            border-left: 3px solid var(--error-color);
-        }
-
-        .log-timestamp {
-            color: var(--text-color);
-            opacity: 0.7;
-            min-width: 80px;
-            font-size: 10px;
-        }
-
-        .log-level {
-            min-width: 50px;
-            font-weight: bold;
-            text-align: center;
-            font-size: 10px;
-        }
-
-        .log-category {
-            min-width: 60px;
-            color: var(--accent-color);
-            font-size: 10px;
-        }
-
-        .log-message {
-            flex: 1;
-            white-space: pre-wrap;
-            word-break: break-all;
-        }
-
-        .no-logs {
-            text-align: center;
-            color: var(--text-color);
-            font-style: italic;
-            padding: 40px;
-        }
-
-        /* 响应式设计 */
-        @media (max-width: 1200px) {
-            .diagnostic-container {
-                grid-template-columns: 1fr;
-            }
-
-            .diagnostic-section {
-                grid-column: span 1 !important;
-            }
-        }
-
-        @media (max-width: 768px) {
-            .log-filters {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .filter-group {
-                justify-content: space-between;
-            }
-
-            .status-grid,
-            .waveform-results {
-                grid-template-columns: 1fr;
-            }
-        }
-
     </style>
 </head>
 <body>
@@ -780,47 +445,6 @@
                     </div>
                 </div>
 
-                <!-- 滑动窗口参数 -->
-                <div style="background-color: #2d2d30; padding: 10px; border-radius: 4px; margin: 10px 0;">
-                    <div style="font-weight: bold; color: #cccccc; margin-bottom: 10px;">滑动窗口检测参数</div>
-
-                    <!-- 窗口大小 -->
-                    <div class="status-row">
-                        <span>窗口大小:</span>
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <input type="number" id="peak-window-size" class="roi-input" value="100" min="10" max="500" style="width: 80px;">
-                            <span class="status-value">向前检测帧数</span>
-                        </div>
-                    </div>
-
-                    <!-- 坡度阈值 -->
-                    <div class="status-row">
-                        <span>坡度阈值:</span>
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <input type="number" id="peak-slope-threshold" class="roi-input" value="0.5" min="0.1" max="5.0" step="0.1" style="width: 80px;">
-                            <span class="status-value">上升/下降坡度判定阈值</span>
-                        </div>
-                    </div>
-
-                    <!-- 最小坡度帧数 -->
-                    <div class="status-row">
-                        <span>坡度帧数:</span>
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <input type="number" id="peak-min-slope-frames" class="roi-input" value="3" min="2" max="10" style="width: 80px;">
-                            <span class="status-value">连续坡度最小帧数</span>
-                        </div>
-                    </div>
-
-                    <!-- 下降阈值 -->
-                    <div class="status-row">
-                        <span>下降阈值:</span>
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <input type="number" id="peak-fall-threshold" class="roi-input" value="100" min="50" max="200" step="0.1" style="width: 80px;">
-                            <span class="status-value">低于此值认为开始下降</span>
-                        </div>
-                    </div>
-                </div>
-
                 <hr style="border: 1px solid var(--border-color); margin: 10px 0;">
 
                 <!-- 波峰检测状态 -->
@@ -866,166 +490,18 @@
 
     <!-- MAIN CONTENT -->
     <div class="main-content">
-        <!-- 诊断面板切换标签 -->
-        <div class="diagnostic-tabs">
-            <button id="tab-chart" class="tab-button active" data-tab="chart">波形图</button>
-            <button id="tab-diagnostic" class="tab-button" data-tab="diagnostic">检测诊断</button>
-            <button id="tab-logs" class="tab-button" data-tab="logs">详细日志</button>
+        <div class="chart-toolbar">
+            <span style="font-weight: 600; font-size: 12px;">实时灰度波形图 (Real-time Waveform)</span>
+        </div>
+        
+        <div class="chart-container" id="chart-container">
+            <canvas id="waveform-chart"></canvas>
+            <div id="tooltip"></div>
         </div>
 
-        <!-- 图表面板 -->
-        <div id="chart-tab" class="tab-content active">
-            <div class="chart-toolbar">
-                <span style="font-weight: 600; font-size: 12px;">实时灰度波形图 (Real-time Waveform)</span>
-            </div>
-
-            <div class="chart-container" id="chart-container">
-                <canvas id="waveform-chart"></canvas>
-                <div id="tooltip"></div>
-            </div>
-
-            <div class="status-bar">
-                <span id="chart-status">Ready</span>
-                <span id="last-update">Last Update: --:--:--</span>
-            </div>
-        </div>
-
-        <!-- 诊断面板 -->
-        <div id="diagnostic-tab" class="tab-content">
-            <div class="diagnostic-container">
-                <!-- 检测状态概览 -->
-                <div class="diagnostic-section">
-                    <h3>🔍 检测状态概览</h3>
-                    <div class="status-grid">
-                        <div class="status-item">
-                            <label>数据源:</label>
-                            <span id="diag-data-source" class="status-value">--</span>
-                        </div>
-                        <div class="status-item">
-                            <label>当前帧数:</label>
-                            <span id="diag-frame-count" class="status-value">0</span>
-                        </div>
-                        <div class="status-item">
-                            <label>ROI值:</label>
-                            <span id="diag-roi-value" class="status-value">--</span>
-                        </div>
-                        <div class="status-item">
-                            <label>缓冲区大小:</label>
-                            <span id="diag-buffer-size" class="status-value">0</span>
-                        </div>
-                        <div class="status-item">
-                            <label>阈值检查:</label>
-                            <span id="diag-threshold-check" class="status-value">--</span>
-                        </div>
-                        <div class="status-item">
-                            <label>处理时间:</label>
-                            <span id="diag-processing-time" class="status-value">--ms</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 滑动窗口分析 -->
-                <div class="diagnostic-section">
-                    <h3>📊 滑动窗口分析</h3>
-                    <div class="window-analysis">
-                        <canvas id="slope-chart" width="400" height="200"></canvas>
-                        <div class="window-legend">
-                            <div class="legend-item">
-                                <div class="legend-color" style="background: #4ec9b0;"></div>
-                                <span>超过阈值</span>
-                            </div>
-                            <div class="legend-item">
-                                <div class="legend-color" style="background: #f48771;"></div>
-                                <span>上升坡度</span>
-                            </div>
-                            <div class="legend-item">
-                                <div class="legend-color" style="background: #dcdcaa;"></div>
-                                <span>下降坡度</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 检测失败原因 -->
-                <div class="diagnostic-section">
-                    <h3>❌ 检测失败分析</h3>
-                    <div class="failure-reasons">
-                        <div id="failure-reasons-list" class="failure-list">
-                            <div class="no-failures">暂无检测失败</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 波形检测结果 -->
-                <div class="diagnostic-section">
-                    <h3>🎯 波形检测结果</h3>
-                    <div class="waveform-results">
-                        <div class="result-item">
-                            <label>上升位置:</label>
-                            <span id="waveform-rise-pos" class="result-value">--</span>
-                        </div>
-                        <div class="result-item">
-                            <label>下降位置:</label>
-                            <span id="waveform-fall-pos" class="result-value">--</span>
-                        </div>
-                        <div class="result-item">
-                            <label>最大值:</label>
-                            <span id="waveform-max-value" class="result-value">--</span>
-                        </div>
-                        <div class="result-item">
-                            <label>峰值颜色:</label>
-                            <span id="waveform-peak-color" class="result-value">--</span>
-                        </div>
-                        <div class="result-item">
-                            <label>置信度:</label>
-                            <span id="waveform-confidence" class="result-value">--</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 日志面板 -->
-        <div id="logs-tab" class="tab-content">
-            <div class="logs-container">
-                <!-- 日志过滤器 -->
-                <div class="log-filters">
-                    <div class="filter-group">
-                        <label>级别:</label>
-                        <select id="log-level-filter">
-                            <option value="">全部</option>
-                            <option value="DEBUG">DEBUG</option>
-                            <option value="INFO">INFO</option>
-                            <option value="WARNING">WARNING</option>
-                            <option value="ERROR">ERROR</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <label>类别:</label>
-                        <select id="log-category-filter">
-                            <option value="">全部</option>
-                            <option value="FRAME">FRAME</option>
-                            <option value="SLOPE">SLOPE</option>
-                            <option value="WINDOW">WINDOW</option>
-                            <option value="ROI">ROI</option>
-                            <option value="PEAK">PEAK</option>
-                            <option value="PERFORMANCE">PERFORMANCE</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <label>搜索:</label>
-                        <input type="text" id="log-search" placeholder="搜索日志内容...">
-                    </div>
-                    <div class="filter-group">
-                        <button id="clear-logs-btn" class="clear-logs-btn">清空日志</button>
-                    </div>
-                </div>
-
-                <!-- 日志显示区域 -->
-                <div class="log-display" id="log-display">
-                    <div class="no-logs">暂无日志数据</div>
-                </div>
-            </div>
+        <div class="status-bar">
+            <span id="chart-status">Ready</span>
+            <span id="last-update">Last Update: --:--:--</span>
         </div>
     </div>
 
@@ -1074,11 +550,7 @@
                 threshold: 105.0,
                 margin_frames: 5,
                 difference_threshold: 2.1,
-                min_region_length: 3,
-                window_size: 100,
-                slope_threshold: 0.5,
-                min_slope_frames: 3,
-                fall_threshold: 100.0
+                min_region_length: 3
             },
             // 内部使用的配置
             maxDataPoints: 100,
@@ -1086,22 +558,7 @@
                 realtime: null,
                 status: null
             },
-            mockMode: false, // 使用真实API接口
-
-            // 诊断相关状态
-            diagnosticData: {
-                dataSource: '--',
-                roiValue: 0,
-                bufferSize: 0,
-                thresholdCheck: false,
-                processingTime: 0,
-                slopeAnalysis: {},
-                failureReasons: [],
-                waveformResults: {}
-            },
-            logs: [],
-            maxLogs: 1000,
-            currentTab: 'chart' // 'chart', 'diagnostic', 'logs'
+            mockMode: false // 使用真实API接口
         };
 
         /**
@@ -1344,10 +801,6 @@
                         margin_frames: 5,
                         difference_threshold: 2.1,
                         min_region_length: 3,
-                        window_size: 100,
-                        slope_threshold: 0.5,
-                        min_slope_frames: 3,
-                        fall_threshold: 100.0,
                         message: "Mock: Peak detection config retrieved"
                     });
                 }
@@ -1803,20 +1256,6 @@
                 // 更新波峰检测状态显示
                 if (data.enhanced_peak) {
                     updatePeakDetectionStatus(data.enhanced_peak);
-
-                    // 更新诊断数据
-                    updateDiagnosticData(data.enhanced_peak);
-
-                    // 添加日志条目
-                    if (data.enhanced_peak.signal === 1) {
-                        addLogEntry('INFO', 'PEAK',
-                            `波峰检测成功 - 颜色: ${data.enhanced_peak.color}, 置信度: ${(data.enhanced_peak.confidence * 100).toFixed(1)}%`,
-                            data.frame_count);
-                    } else if (data.enhanced_peak.diagnostic_info && data.enhanced_peak.diagnostic_info.failure_reasons.length > 0) {
-                        addLogEntry('DEBUG', 'DETECTION',
-                            `波峰检测失败 - 原因: ${data.enhanced_peak.diagnostic_info.failure_reasons.join(', ')}`,
-                            data.frame_count);
-                    }
                 } else {
                     updatePeakDetectionStatus(null);
                 }
@@ -2053,22 +1492,12 @@
                     document.getElementById('peak-difference-threshold').value = localConfig.difference_threshold;
                     document.getElementById('peak-min-region-length').value = localConfig.min_region_length;
 
-                    // 更新滑动窗口参数UI
-                    document.getElementById('peak-window-size').value = localConfig.window_size || 100;
-                    document.getElementById('peak-slope-threshold').value = localConfig.slope_threshold || 0.5;
-                    document.getElementById('peak-min-slope-frames').value = localConfig.min_slope_frames || 3;
-                    document.getElementById('peak-fall-threshold').value = localConfig.fall_threshold || 100.0;
-
                     // 更新应用状态
                     appState.peakConfig = {
                         threshold: localConfig.threshold,
                         margin_frames: localConfig.margin_frames,
                         difference_threshold: localConfig.difference_threshold,
-                        min_region_length: localConfig.min_region_length,
-                        window_size: localConfig.window_size || 100,
-                        slope_threshold: localConfig.slope_threshold || 0.5,
-                        min_slope_frames: localConfig.min_slope_frames || 3,
-                        fall_threshold: localConfig.fall_threshold || 100.0
+                        min_region_length: localConfig.min_region_length
                     };
 
                     // 同时应用到后端以保持同步
@@ -2076,11 +1505,7 @@
                         threshold: localConfig.threshold,
                         margin_frames: localConfig.margin_frames,
                         difference_threshold: localConfig.difference_threshold,
-                        min_region_length: localConfig.min_region_length,
-                        window_size: localConfig.window_size || 100,
-                        slope_threshold: localConfig.slope_threshold || 0.5,
-                        min_slope_frames: localConfig.min_slope_frames || 3,
-                        fall_threshold: localConfig.fall_threshold || 100.0
+                        min_region_length: localConfig.min_region_length
                     });
 
                     if (backendResponse && backendResponse.success) {
@@ -2103,11 +1528,7 @@
                             threshold: response.threshold,
                             margin_frames: response.margin_frames,
                             difference_threshold: response.difference_threshold,
-                            min_region_length: response.min_region_length,
-                            window_size: response.window_size,
-                            slope_threshold: response.slope_threshold,
-                            min_slope_frames: response.min_slope_frames,
-                            fall_threshold: response.fall_threshold
+                            min_region_length: response.min_region_length
                         };
 
                         // 保存到localStorage供下次使用
@@ -2124,10 +1545,6 @@
                 document.getElementById('peak-margin-frames').value = defaultConfig.margin_frames;
                 document.getElementById('peak-difference-threshold').value = defaultConfig.difference_threshold;
                 document.getElementById('peak-min-region-length').value = defaultConfig.min_region_length;
-                document.getElementById('peak-window-size').value = defaultConfig.window_size;
-                document.getElementById('peak-slope-threshold').value = defaultConfig.slope_threshold;
-                document.getElementById('peak-min-slope-frames').value = defaultConfig.min_slope_frames;
-                document.getElementById('peak-fall-threshold').value = defaultConfig.fall_threshold;
             }
         }
 
@@ -2137,12 +1554,6 @@
                 const marginFrames = parseInt(document.getElementById('peak-margin-frames').value) || 5;
                 const differenceThreshold = parseFloat(document.getElementById('peak-difference-threshold').value) || 2.1;
                 const minRegionLength = parseInt(document.getElementById('peak-min-region-length').value) || 3;
-
-                // 新增滑动窗口参数
-                const windowSize = parseInt(document.getElementById('peak-window-size').value) || 100;
-                const slopeThreshold = parseFloat(document.getElementById('peak-slope-threshold').value) || 0.5;
-                const minSlopeFrames = parseInt(document.getElementById('peak-min-slope-frames').value) || 3;
-                const fallThreshold = parseFloat(document.getElementById('peak-fall-threshold').value) || 100.0;
 
                 // 验证参数范围
                 if (threshold < 50.0 || threshold > 255.0) {
@@ -2165,37 +1576,12 @@
                     return;
                 }
 
-                // 验证新滑动窗口参数
-                if (windowSize < 10 || windowSize > 500) {
-                    alert('窗口大小无效：必须在10-500之间');
-                    return;
-                }
-
-                if (slopeThreshold < 0.1 || slopeThreshold > 5.0) {
-                    alert('坡度阈值无效：必须在0.1-5.0之间');
-                    return;
-                }
-
-                if (minSlopeFrames < 2 || minSlopeFrames > 10) {
-                    alert('最小坡度帧数无效：必须在2-10之间');
-                    return;
-                }
-
-                if (fallThreshold < 50.0 || fallThreshold > 200.0) {
-                    alert('下降阈值无效：必须在50.0-200.0之间');
-                    return;
-                }
-
                 // 发送API请求
                 const config = {
                     threshold: threshold,
                     margin_frames: marginFrames,
                     difference_threshold: differenceThreshold,
-                    min_region_length: minRegionLength,
-                    window_size: windowSize,
-                    slope_threshold: slopeThreshold,
-                    min_slope_frames: minSlopeFrames,
-                    fall_threshold: fallThreshold
+                    min_region_length: minRegionLength
                 };
 
                 const response = await ApiService.setPeakDetectionConfig(config);
@@ -2334,280 +1720,9 @@
             // 波峰检测配置控制
             document.getElementById('apply-peak-config-btn').addEventListener('click', applyPeakDetectionConfig);
 
-            // 诊断面板功能
-            document.getElementById('clear-logs-btn').addEventListener('click', clearLogs);
-
-            // 标签切换事件监听器
-            document.getElementById('tab-chart').addEventListener('click', () => switchTab('chart'));
-            document.getElementById('tab-diagnostic').addEventListener('click', () => switchTab('diagnostic'));
-            document.getElementById('tab-logs').addEventListener('click', () => switchTab('logs'));
-
-            // 日志过滤事件监听器
-            document.getElementById('log-level-filter').addEventListener('change', filterLogs);
-            document.getElementById('log-category-filter').addEventListener('change', filterLogs);
-            document.getElementById('log-search').addEventListener('input', filterLogs);
-
             // 启动
             initConnection();
         });
-
-        /**
-         * 诊断面板相关功能
-         */
-        function switchTab(tabName) {
-            // 更新状态
-            appState.currentTab = tabName;
-
-            // 更新标签按钮状态
-            document.querySelectorAll('.tab-button').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            document.getElementById(`tab-${tabName}`).classList.add('active');
-
-            // 显示对应内容
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.remove('active');
-            });
-            document.getElementById(`${tabName}-tab`).classList.add('active');
-
-            // 如果切换到诊断标签，更新诊断数据显示
-            if (tabName === 'diagnostic') {
-                updateDiagnosticDisplay();
-            }
-        }
-
-        function updateDiagnosticData(data) {
-            if (!data || !data.diagnostic_info) return;
-
-            const diag = data.diagnostic_info;
-            appState.diagnosticData = {
-                dataSource: data.data_source || '--',
-                roiValue: diag.roi_value || 0,
-                bufferSize: diag.buffer_size || 0,
-                thresholdCheck: diag.threshold_check || false,
-                processingTime: diag.processing_time_ms || 0,
-                slopeAnalysis: diag.slope_analysis || {},
-                failureReasons: diag.failure_reasons || [],
-                waveformResults: {
-                    risePos: diag.waveform_detection?.rise_position || '--',
-                    fallPos: diag.waveform_detection?.fall_position || '--',
-                    maxValue: diag.waveform_detection?.max_value || '--',
-                    peakColor: data.peak_color || '--',
-                    confidence: data.peak_confidence || '--'
-                }
-            };
-
-            // 如果当前在诊断标签页，立即更新显示
-            if (appState.currentTab === 'diagnostic') {
-                updateDiagnosticDisplay();
-            }
-        }
-
-        function updateDiagnosticDisplay() {
-            const diag = appState.diagnosticData;
-
-            // 更新检测状态概览
-            document.getElementById('diag-data-source').textContent = diag.dataSource;
-            document.getElementById('diag-frame-count').textContent = appState.frameCount;
-            document.getElementById('diag-roi-value').textContent = diag.roiValue.toFixed(2);
-            document.getElementById('diag-buffer-size').textContent = diag.bufferSize;
-            document.getElementById('diag-threshold-check').textContent = diag.thresholdCheck ? '✅ 通过' : '❌ 未通过';
-            document.getElementById('diag-processing-time').textContent = `${diag.processingTime.toFixed(2)}ms`;
-
-            // 更新检测失败原因
-            updateFailureReasonsDisplay();
-
-            // 更新波形检测结果
-            document.getElementById('waveform-rise-pos').textContent = diag.waveformResults.risePos;
-            document.getElementById('waveform-fall-pos').textContent = diag.waveformResults.fallPos;
-            document.getElementById('waveform-max-value').textContent =
-                diag.waveformResults.maxValue === '--' ? '--' : diag.waveformResults.maxValue.toFixed(2);
-            document.getElementById('waveform-peak-color').textContent = diag.waveformResults.peakColor;
-            document.getElementById('waveform-confidence').textContent =
-                diag.waveformResults.confidence === '--' ? '--' : (diag.waveformResults.confidence * 100).toFixed(1) + '%';
-
-            // 更新滑动窗口图表
-            updateSlopeChart();
-        }
-
-        function updateFailureReasonsDisplay() {
-            const failureList = document.getElementById('failure-reasons-list');
-            const reasons = appState.diagnosticData.failureReasons;
-
-            if (reasons && reasons.length > 0) {
-                failureList.innerHTML = reasons.map(reason =>
-                    `<div class="failure-item">${reason}</div>`
-                ).join('');
-            } else {
-                failureList.innerHTML = '<div class="no-failures">暂无检测失败</div>';
-            }
-        }
-
-        function updateSlopeChart() {
-            const canvas = document.getElementById('slope-chart');
-            if (!canvas) return;
-
-            const ctx = canvas.getContext('2d');
-            const width = canvas.width;
-            const height = canvas.height;
-            const slopeData = appState.diagnosticData.slopeAnalysis;
-
-            // 清空画布
-            ctx.clearRect(0, 0, width, height);
-
-            // 绘制背景网格
-            ctx.strokeStyle = '#404040';
-            ctx.lineWidth = 1;
-            for (let i = 0; i <= 10; i++) {
-                const y = (height / 10) * i;
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(width, y);
-                ctx.stroke();
-            }
-
-            if (!slopeData || Object.keys(slopeData).length === 0) {
-                // 显示无数据文本
-                ctx.fillStyle = '#cccccc';
-                ctx.font = '12px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('暂无坡度分析数据', width / 2, height / 2);
-                return;
-            }
-
-            // 绘制坡度数据
-            const frames = Object.keys(slopeData);
-            if (frames.length === 0) return;
-
-            const barWidth = Math.max(2, width / frames.length);
-            const values = frames.map(frame => parseFloat(slopeData[frame].value));
-            const slopes = frames.map(frame => parseFloat(slopeData[frame].slope));
-
-            const maxValue = Math.max(...values, 150);
-            const minValue = Math.min(...values, 50);
-            const maxSlope = Math.max(...slopes.map(Math.abs), 1);
-
-            const valueScale = height / (maxValue - minValue);
-            const centerX = width / 2;
-
-            // 绘制阈值线
-            const thresholdLineY = height - ((appState.peakConfig.threshold - minValue) * valueScale);
-            ctx.strokeStyle = '#f48771';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([5, 5]);
-            ctx.beginPath();
-            ctx.moveTo(0, thresholdLineY);
-            ctx.lineTo(width, thresholdLineY);
-            ctx.stroke();
-            ctx.setLineDash([]);
-
-            frames.forEach((frame, index) => {
-                const frameData = slopeData[frame];
-                const x = index * barWidth + barWidth / 2;
-                const value = parseFloat(frameData.value);
-                const slope = parseFloat(frameData.slope);
-
-                const y = height - ((value - minValue) * valueScale);
-
-                // 根据状态选择颜色
-                let color = '#6c757d'; // 默认灰色
-                if (frameData.above_threshold) {
-                    color = '#4ec9b0'; // 绿色 - 超过阈值
-                } else if (frameData.rising_slope) {
-                    color = '#f48771'; // 红色 - 上升坡度
-                } else if (frameData.falling_slope) {
-                    color = '#dcdcaa'; // 黄色 - 下降坡度
-                }
-
-                // 绘制数值条
-                ctx.fillStyle = color;
-                ctx.fillRect(x - barWidth/2, y - 2, barWidth - 1, 4);
-
-                // 绘制坡度指示（小三角形）
-                if (Math.abs(slope) > 0.1) {
-                    ctx.fillStyle = color;
-                    ctx.beginPath();
-                    if (slope > 0) {
-                        ctx.moveTo(x, y - 8);
-                        ctx.lineTo(x - 3, y - 3);
-                        ctx.lineTo(x + 3, y - 3);
-                    } else {
-                        ctx.moveTo(x, y + 8);
-                        ctx.lineTo(x - 3, y + 3);
-                        ctx.lineTo(x + 3, y + 3);
-                    }
-                    ctx.fill();
-                }
-            });
-        }
-
-        function addLogEntry(level, category, message, frameCount = null, details = {}) {
-            const logEntry = {
-                timestamp: new Date().toISOString(),
-                level: level,
-                category: category,
-                message: message,
-                frameCount: frameCount,
-                details: details
-            };
-
-            appState.logs.unshift(logEntry);
-
-            // 限制日志数量
-            if (appState.logs.length > appState.maxLogs) {
-                appState.logs = appState.logs.slice(0, appState.maxLogs);
-            }
-
-            // 如果当前在日志标签页，更新显示
-            if (appState.currentTab === 'logs') {
-                updateLogsDisplay();
-            }
-        }
-
-        function updateLogsDisplay() {
-            const logDisplay = document.getElementById('log-display');
-            const filteredLogs = getFilteredLogs();
-
-            if (filteredLogs.length === 0) {
-                logDisplay.innerHTML = '<div class="no-logs">暂无日志数据</div>';
-                return;
-            }
-
-            logDisplay.innerHTML = filteredLogs.map(log => {
-                const time = new Date(log.timestamp).toLocaleTimeString();
-                return `
-                    <div class="log-entry ${log.level}">
-                        <span class="log-timestamp">${time}</span>
-                        <span class="log-level">${log.level}</span>
-                        <span class="log-category">${log.category}</span>
-                        <span class="log-message">${log.message}</span>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        function getFilteredLogs() {
-            const levelFilter = document.getElementById('log-level-filter').value;
-            const categoryFilter = document.getElementById('log-category-filter').value;
-            const searchTerm = document.getElementById('log-search').value.toLowerCase();
-
-            return appState.logs.filter(log => {
-                if (levelFilter && log.level !== levelFilter) return false;
-                if (categoryFilter && log.category !== categoryFilter) return false;
-                if (searchTerm && !log.message.toLowerCase().includes(searchTerm)) return false;
-                return true;
-            });
-        }
-
-        function filterLogs() {
-            updateLogsDisplay();
-        }
-
-        function clearLogs() {
-            appState.logs = [];
-            updateLogsDisplay();
-            addLogEntry('INFO', 'FRONTEND', '日志已清空');
-        }
 
     </script>
 </body>
