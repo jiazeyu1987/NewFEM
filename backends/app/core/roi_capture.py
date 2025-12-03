@@ -1,0 +1,173 @@
+"""
+ROI截图服务模块
+提供屏幕截图和ROI区域截取功能
+"""
+
+import base64
+import io
+import logging
+from typing import Optional, Tuple
+
+# 启用PIL导入
+from PIL import Image, ImageGrab
+
+from ..models import RoiConfig, RoiData
+
+
+class RoiCaptureService:
+    """ROI截图服务类"""
+
+    def __init__(self):
+        self._logger = logging.getLogger(self.__class__.__name__)
+
+    def capture_screen(self) -> Optional[Image.Image]:
+        """
+        截取整个屏幕
+
+        Returns:
+            PIL.Image: 屏幕截图，失败返回None
+        """
+        try:
+            screenshot = ImageGrab.grab()
+            self._logger.debug("Screen captured successfully, size: %s", screenshot.size)
+            return screenshot
+        except Exception as e:
+            self._logger.error("Failed to capture screen: %s", str(e))
+            return None
+
+    def capture_roi(self, roi_config: RoiConfig) -> Optional[RoiData]:
+        """
+        截取指定ROI区域
+
+        Args:
+            roi_config: ROI配置
+
+        Returns:
+            RoiData: ROI数据，失败返回None
+        """
+        try:
+            # 首先截取整个屏幕
+            screen = self.capture_screen()
+            if screen is None:
+                self._logger.error("Failed to capture screen for ROI")
+                return None
+
+            # 验证ROI坐标
+            if not roi_config.validate_coordinates():
+                self._logger.error("Invalid ROI coordinates: %s", roi_config)
+                return None
+
+            # 检查ROI是否在屏幕范围内
+            screen_width, screen_height = screen.size
+            if (roi_config.x2 > screen_width or roi_config.y2 > screen_height or
+                roi_config.x1 < 0 or roi_config.y1 < 0):
+                self._logger.warning(
+                    "ROI coordinates exceed screen bounds. Screen: %dx%d, ROI: (%d,%d)->(%d,%d)",
+                    screen_width, screen_height,
+                    roi_config.x1, roi_config.y1, roi_config.x2, roi_config.y2
+                )
+                # 自动调整到屏幕范围内
+                x1 = max(0, min(roi_config.x1, screen_width - 1))
+                y1 = max(0, min(roi_config.y1, screen_height - 1))
+                x2 = max(x1 + 1, min(roi_config.x2, screen_width))
+                y2 = max(y1 + 1, min(roi_config.y2, screen_height))
+            else:
+                x1, y1, x2, y2 = roi_config.x1, roi_config.y1, roi_config.x2, roi_config.y2
+
+            # 截取ROI区域
+            roi_image = screen.crop((x1, y1, x2, y2))
+
+            # 计算ROI平均灰度值
+            gray_roi = roi_image.convert('L')
+            # 简化计算：使用PIL的直方图来计算平均值
+            histogram = gray_roi.histogram()
+            total_pixels = roi_config.width * roi_config.height
+            total_sum = sum(i * count for i, count in enumerate(histogram))
+            average_gray = float(total_sum / total_pixels) if total_pixels > 0 else 0.0
+
+            # 调整ROI图像大小到标准尺寸（200x150）
+            try:
+                roi_resized = roi_image.resize((200, 150), Image.Resampling.LANCZOS)
+            except AttributeError:
+                # 兼容旧版本PIL
+                roi_resized = roi_image.resize((200, 150), Image.LANCZOS)
+
+            # 转换为base64
+            buffer = io.BytesIO()
+            roi_resized.save(buffer, format='PNG')
+            roi_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+            roi_data = RoiData(
+                width=roi_config.width,
+                height=roi_config.height,
+                pixels=f"data:image/png;base64,{roi_base64}",
+                gray_value=average_gray,
+                format="base64"
+            )
+
+            self._logger.debug(
+                "ROI captured successfully: size=%dx%d, gray_value=%.2f, base64_length=%d",
+                roi_config.width, roi_config.height, average_gray, len(roi_base64)
+            )
+
+            return roi_data
+
+        except Exception as e:
+            self._logger.error("Failed to capture ROI: %s", str(e))
+            return None
+
+    def get_screen_resolution(self) -> Tuple[int, int]:
+        """
+        获取屏幕分辨率
+
+        Returns:
+            Tuple[int, int]: (宽度, 高度)
+        """
+        try:
+            screen = self.capture_screen()
+            if screen:
+                return screen.size
+            return (1920, 1080)  # 默认分辨率
+        except Exception:
+            return (1920, 1080)  # 默认分辨率
+
+    def validate_roi_coordinates(self, roi_config: RoiConfig) -> Tuple[bool, str]:
+        """
+        验证ROI坐标是否有效
+
+        Args:
+            roi_config: ROI配置
+
+        Returns:
+            Tuple[bool, str]: (是否有效, 错误信息)
+        """
+        try:
+            # 基本坐标验证
+            if not roi_config.validate_coordinates():
+                return False, "Invalid coordinates: x1 must be < x2 and y1 must be < y2"
+
+            # 获取屏幕分辨率
+            screen_width, screen_height = self.get_screen_resolution()
+
+            # 检查坐标范围
+            if roi_config.x1 < 0 or roi_config.y1 < 0:
+                return False, "Coordinates cannot be negative"
+
+            if roi_config.x2 > screen_width or roi_config.y2 > screen_height:
+                return False, f"Coordinates exceed screen resolution ({screen_width}x{screen_height})"
+
+            # 检查ROI大小
+            if roi_config.width < 10 or roi_config.height < 10:
+                return False, "ROI size too small (minimum 10x10)"
+
+            if roi_config.width > 1000 or roi_config.height > 1000:
+                return False, "ROI size too large (maximum 1000x1000)"
+
+            return True, "Valid ROI coordinates"
+
+        except Exception as e:
+            return False, f"Validation error: {str(e)}"
+
+
+# 单例ROI截图服务
+roi_capture_service = RoiCaptureService()

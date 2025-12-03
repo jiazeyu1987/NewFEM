@@ -41,7 +41,7 @@ class RoiData(BaseModel):
     height: int
     pixels: str
     gray_value: float
-    format: str = "text"
+    format: str = "base64"
 
 
 class RealtimeDataResponse(BaseModel):
@@ -122,6 +122,56 @@ class AnalyzeSeriesPoint(BaseModel):
     std: float
     high: float
     orange: float
+
+
+class RoiConfig(BaseModel):
+    """ROI配置模型"""
+    x1: int = Field(0, ge=0, description="ROI左上角X坐标")
+    y1: int = Field(0, ge=0, description="ROI左上角Y坐标")
+    x2: int = Field(100, ge=0, description="ROI右下角X坐标")
+    y2: int = Field(100, ge=0, description="ROI右下角Y坐标")
+
+    @property
+    def center_x(self) -> int:
+        """ROI中心X坐标"""
+        return (self.x1 + self.x2) // 2
+
+    @property
+    def center_y(self) -> int:
+        """ROI中心Y坐标"""
+        return (self.y1 + self.y2) // 2
+
+    @property
+    def width(self) -> int:
+        """ROI宽度"""
+        return abs(self.x2 - self.x1)
+
+    @property
+    def height(self) -> int:
+        """ROI高度"""
+        return abs(self.y2 - self.y1)
+
+    def validate_coordinates(self) -> bool:
+        """验证坐标有效性"""
+        return self.x1 < self.x2 and self.y1 < self.y2 and self.width > 0 and self.height > 0
+
+
+class RoiConfigResponse(BaseModel):
+    """ROI配置响应模型"""
+    type: str = "roi_config"
+    timestamp: datetime
+    config: RoiConfig
+    success: bool = True
+
+
+class RoiCaptureResponse(BaseModel):
+    """ROI截图响应模型"""
+    type: str = "roi_capture"
+    timestamp: datetime
+    success: bool = True
+    roi_data: RoiData
+    config: RoiConfig
+    message: str = "ROI capture successful"
 
 
 class AnalyzeResponse(BaseModel):

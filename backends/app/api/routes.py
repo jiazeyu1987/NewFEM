@@ -32,6 +32,9 @@ from ..models import (
     HealthResponse,
     PeakSignalResponse,
     RealtimeDataResponse,
+    RoiCaptureResponse,
+    RoiConfig,
+    RoiConfigResponse,
     RoiData,
     StatusResponse,
     SystemStatus,
@@ -39,6 +42,7 @@ from ..models import (
 )
 from ..core.data_store import data_store
 from ..core.processor import processor
+from ..core.roi_capture import roi_capture_service
 
 
 router = APIRouter()
@@ -145,8 +149,10 @@ async def realtime_data(
             roi_data=RoiData(
                 width=200,
                 height=150,
-                pixels="no_data",
+                # 为无数据情况生成默认的"无数据"图片
+                pixels=create_roi_data_with_image(0.0)[0],
                 gray_value=0.0,
+                format="base64",
             ),
             peak_signal=None,
             baseline=0.0,
@@ -170,12 +176,26 @@ async def realtime_data(
         baseline,
     ) = data_store.get_status_snapshot()
 
-    roi_data = RoiData(
-        width=200,
-        height=150,
-        pixels=f"simulated_roi_{current_value:.1f}",
-        gray_value=current_value,
-    )
+    # 只有在ROI已配置时才返回ROI数据，否则返回空数据
+    roi_configured, roi_config = data_store.get_roi_status()
+    if roi_configured:
+        # 返回已配置的ROI信息，但不生成模拟图像
+        roi_data = RoiData(
+            width=roi_config.width,
+            height=roi_config.height,
+            pixels="roi_not_captured",  # 提示需要手动截图
+            gray_value=0.0,
+            format="text",
+        )
+    else:
+        # ROI未配置，返回空数据
+        roi_data = RoiData(
+            width=0,
+            height=0,
+            pixels="roi_not_configured",
+            gray_value=0.0,
+            format="text",
+        )
 
     logger.debug(
         "📊 Realtime data response: frame_count=%d points=%d last_value=%.3f peak_signal=%s baseline=%.3f",
@@ -257,6 +277,21 @@ async def control(
 
     # 控制检测流程的命令使用 control_response 格式
     if cmd_lower == "start_detection":
+        # 检查ROI是否已配置
+        if not data_store.is_roi_configured():
+            logger.warning("Attempted to start detection without ROI configuration")
+            error = ErrorResponse(
+                timestamp=now,
+                error_code="ROI_NOT_CONFIGURED",
+                error_message="ROI must be configured before starting detection",
+                details=ErrorDetails(
+                    parameter="ROI",
+                    value="not configured",
+                    constraint="ROI configuration is required before detection"
+                )
+            )
+            return JSONResponse(status_code=400, content=error.model_dump(mode='json'))
+
         processor.start()
         system_status = data_store.get_status()
         resp = ControlCommandResponse(
@@ -424,6 +459,90 @@ async def analyze(
         realtime=realtime_mode,
         peak_signal=peak_signal,
         frame_count=frame_count,
+    )
+
+
+# ROI配置端点
+@router.post("/roi/config", response_model=RoiConfigResponse)
+async def set_roi_config(
+    x1: int = Form(...),
+    y1: int = Form(...),
+    x2: int = Form(...),
+    y2: int = Form(...),
+    password: str = Form(...),
+) -> RoiConfigResponse:
+    """设置ROI配置"""
+    verify_password(password)
+
+    logger.info("🎯 Setting ROI config: (%d,%d) -> (%d,%d)", x1, y1, x2, y2)
+
+    # 创建ROI配置
+    roi_config = RoiConfig(x1=x1, y1=y1, x2=x2, y2=y2)
+
+    # 暂时简化验证
+    if not roi_config.validate_coordinates():
+        logger.warning("Invalid ROI config: coordinates validation failed")
+        raise HTTPException(status_code=400, detail="INVALID_ROI_COORDINATES")
+
+    # 保存配置
+    try:
+        data_store.set_roi_config(roi_config)
+        logger.info("✅ ROI config set successfully: size=%dx%d, center=(%d,%d)",
+                   roi_config.width, roi_config.height, roi_config.center_x, roi_config.center_y)
+    except ValueError as e:
+        logger.error("Failed to set ROI config: %s", str(e))
+        raise HTTPException(status_code=400, detail="FAILED_TO_SET_ROI_CONFIG")
+
+    return RoiConfigResponse(
+        timestamp=datetime.utcnow(),
+        config=roi_config,
+        success=True,
+    )
+
+
+@router.get("/roi/config", response_model=RoiConfigResponse)
+async def get_roi_config() -> RoiConfigResponse:
+    """获取当前ROI配置"""
+    roi_config = data_store.get_roi_config()
+
+    logger.debug("📍 Current ROI config: (%d,%d) -> (%d,%d), size=%dx%d",
+                roi_config.x1, roi_config.y1, roi_config.x2, roi_config.y2,
+                roi_config.width, roi_config.height)
+
+    return RoiConfigResponse(
+        timestamp=datetime.utcnow(),
+        config=roi_config,
+        success=True,
+    )
+
+
+@router.post("/roi/capture", response_model=RoiCaptureResponse)
+async def capture_roi(
+    password: str = Form(...),
+) -> RoiCaptureResponse:
+    """执行ROI截图"""
+    verify_password(password)
+
+    logger.info("📸 ROI capture requested")
+
+    # 获取当前ROI配置
+    roi_config = data_store.get_roi_config()
+
+    # 执行真实的ROI截图
+    roi_data = roi_capture_service.capture_roi(roi_config)
+    if roi_data is None:
+        logger.error("Failed to capture ROI")
+        raise HTTPException(status_code=500, detail="ROI_CAPTURE_FAILED")
+
+    logger.info("✅ ROI captured successfully: size=%dx%d, gray=%.2f",
+               roi_data.width, roi_data.height, roi_data.gray_value)
+
+    return RoiCaptureResponse(
+        timestamp=datetime.utcnow(),
+        success=True,
+        roi_data=roi_data,
+        config=roi_config,
+        message=f"ROI captured successfully: {roi_data.width}x{roi_data.height}",
     )
 
 

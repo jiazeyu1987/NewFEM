@@ -244,6 +244,26 @@
         .signal-red { color: var(--error-color); background: rgba(244, 135, 113, 0.1); }
         .signal-none { color: #666; }
 
+        /* ROI 输入框样式 */
+        .roi-input {
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            text-align: right;
+        }
+        .roi-input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 1px var(--accent-color);
+        }
+        .roi-input:invalid {
+            border-color: var(--error-color);
+        }
+
     </style>
 </head>
 <body>
@@ -327,10 +347,63 @@
                     <span>ROI 平均灰度:</span>
                     <span id="roi-gray-value" class="status-value">0.0</span>
                 </div>
+                <div class="status-row" style="width: 100%; margin-top: 10px;">
+                    <button id="roi-screenshot-btn" class="control-btn" style="width: 100%; height: 30px; font-size: 12px;" disabled>
+                        📸 截图保存
+                    </button>
+                </div>
             </div>
         </div>
 
-        <!-- 3.4 检测控制面板 -->
+        <!-- 3.4 ROI 设置面板 -->
+        <div class="panel">
+            <div class="panel-header">ROI 设置</div>
+            <div class="panel-content">
+                <!-- ROI配置状态指示 -->
+                <div class="status-row">
+                    <span>配置状态:</span>
+                    <div>
+                        <span id="roi-status-indicator" class="indicator disconnected"></span>
+                        <span id="roi-status-text">未配置</span>
+                    </div>
+                </div>
+                <div class="status-row">
+                    <span>x1 坐标:</span>
+                    <input type="number" id="roi-x1" class="roi-input" value="0" min="0" style="width: 80px;">
+                </div>
+                <div class="status-row">
+                    <span>y1 坐标:</span>
+                    <input type="number" id="roi-y1" class="roi-input" value="0" min="0" style="width: 80px;">
+                </div>
+                <div class="status-row">
+                    <span>x2 坐标:</span>
+                    <input type="number" id="roi-x2" class="roi-input" value="200" min="0" style="width: 80px;">
+                </div>
+                <div class="status-row">
+                    <span>y2 坐标:</span>
+                    <input type="number" id="roi-y2" class="roi-input" value="150" min="0" style="width: 80px;">
+                </div>
+                <hr style="border: 1px solid var(--border-color); margin: 10px 0;">
+                <div class="status-row">
+                    <span>中心点:</span>
+                    <span id="roi-center" class="status-value">(100, 75)</span>
+                </div>
+                <div class="status-row">
+                    <span>宽度:</span>
+                    <span id="roi-width" class="status-value">200 px</span>
+                </div>
+                <div class="status-row">
+                    <span>高度:</span>
+                    <span id="roi-height" class="status-value">150 px</span>
+                </div>
+                <div class="control-group" style="margin-top: 10px;">
+                    <button id="apply-roi-btn" style="width: 100%; height: 30px; font-size: 12px;">应用配置</button>
+                    <button id="capture-roi-btn" style="width: 100%; height: 30px; font-size: 12px; margin-top: 5px;">📸 ROI截图</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3.5 检测控制面板 -->
         <div class="panel">
             <div class="panel-header">控制台</div>
             <div class="panel-content">
@@ -390,6 +463,18 @@
                 zoom: 1.0,
                 offsetY: 0
             },
+            // ROI配置状态
+            roiConfig: {
+                x1: 0,
+                y1: 0,
+                x2: 200,
+                y2: 150,
+                center_x: 100,
+                center_y: 75,
+                width: 200,
+                height: 150
+            },
+            roiConfigured: false,  // ROI是否已由用户配置
             // 内部使用的配置
             maxDataPoints: 100,
             pollingIntervals: {
@@ -468,6 +553,19 @@
                 };
             },
 
+            // ROI相关模拟方法
+            getRoiData: function() {
+                // 生成模拟的ROI图像数据
+                const mockGrayValue = this.baseValue + (Math.random() - 0.5) * 20;
+                return {
+                    width: appState.roiConfig.width,
+                    height: appState.roiConfig.height,
+                    pixels: "mock_roi_data_" + mockGrayValue.toFixed(1),
+                    gray_value: mockGrayValue,
+                    format: "text"
+                };
+            },
+
             // 模拟控制命令响应
             control: function(command) {
                 switch(command) {
@@ -518,6 +616,90 @@
                     return await response.json();
                 } catch(e) {
                     return { status: 'error' };
+                }
+            },
+
+            // ROI相关API
+            async getRoiConfig() {
+                if (appState.mockMode) {
+                    return Promise.resolve({
+                        type: "roi_config",
+                        success: true,
+                        config: appState.roiConfig
+                    });
+                }
+                try {
+                    const response = await fetch(`${appState.serverUrl}/roi/config`);
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return await response.json();
+                } catch(e) {
+                    console.error("Get ROI config error:", e);
+                    return null;
+                }
+            },
+
+            async setRoiConfig(x1, y1, x2, y2) {
+                if (appState.mockMode) {
+                    // 更新本地状态
+                    appState.roiConfig = {
+                        x1: parseInt(x1), y1: parseInt(y1),
+                        x2: parseInt(x2), y2: parseInt(y2),
+                        center_x: Math.floor((parseInt(x1) + parseInt(x2)) / 2),
+                        center_y: Math.floor((parseInt(y1) + parseInt(y2)) / 2),
+                        width: Math.abs(parseInt(x2) - parseInt(x1)),
+                        height: Math.abs(parseInt(y2) - parseInt(y1))
+                    };
+                    return Promise.resolve({
+                        type: "roi_config",
+                        success: true,
+                        config: appState.roiConfig
+                    });
+                }
+                const formData = new URLSearchParams();
+                formData.append('x1', x1);
+                formData.append('y1', y1);
+                formData.append('x2', x2);
+                formData.append('y2', y2);
+                formData.append('password', '31415');
+
+                try {
+                    const response = await fetch(`${appState.serverUrl}/roi/config`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: formData
+                    });
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return await response.json();
+                } catch(e) {
+                    console.error("Set ROI config error:", e);
+                    return { success: false, error: str(e) };
+                }
+            },
+
+            async captureRoi() {
+                if (appState.mockMode) {
+                    return Promise.resolve({
+                        type: "roi_capture",
+                        success: true,
+                        roi_data: MockServer.getRoiData(),
+                        config: appState.roiConfig,
+                        message: "ROI captured successfully"
+                    });
+                }
+                const formData = new URLSearchParams();
+                formData.append('password', '31415');
+
+                try {
+                    const response = await fetch(`${appState.serverUrl}/roi/capture`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: formData
+                    });
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return await response.json();
+                } catch(e) {
+                    console.error("ROI capture error:", e);
+                    return { success: false, error: str(e) };
                 }
             }
         };
@@ -671,26 +853,59 @@
             }
 
             render(roiData) {
-                if (!roiData) return;
-                
                 // 清空
                 this.ctx.clearRect(0, 0, 200, 150);
+
+                if (!roiData) {
+                    // 无ROI数据时显示提示
+                    this.drawPlaceholder("ROI数据未初始化");
+                    return;
+                }
 
                 if (appState.mockMode && roiData.raw) {
                     // Mock模式下直接绘制生成的像素数据
                     const imgData = new ImageData(roiData.raw, 200, 150);
                     this.ctx.putImageData(imgData, 0, 0);
                 } else if (roiData.format === 'base64') {
+                    // 显示真实的base64图像
                     const img = new Image();
                     img.onload = () => this.ctx.drawImage(img, 0, 0, 200, 150);
                     img.src = roiData.pixels;
+                } else if (roiData.pixels === 'roi_not_configured') {
+                    // ROI未配置
+                    this.drawPlaceholder("请先配置ROI区域");
+                } else if (roiData.pixels === 'roi_not_captured') {
+                    // ROI已配置但未截图
+                    this.drawPlaceholder("请点击ROI截图按钮");
                 } else {
-                    // Text format mock fallback
-                    this.ctx.fillStyle = '#333';
-                    this.ctx.fillRect(0, 0, 200, 150);
-                    this.ctx.fillStyle = '#fff';
-                    this.ctx.fillText("Text Format Data", 60, 75);
+                    // 其他文本格式数据
+                    this.drawPlaceholder("ROI数据格式: " + roiData.pixels);
                 }
+            }
+
+            drawPlaceholder(message) {
+                // 绘制背景
+                this.ctx.fillStyle = '#2d2d30';
+                this.ctx.fillRect(0, 0, 200, 150);
+
+                // 绘制边框
+                this.ctx.strokeStyle = '#3e3e42';
+                this.ctx.strokeRect(0, 0, 200, 150);
+
+                // 绘制文字
+                this.ctx.fillStyle = '#cccccc';
+                this.ctx.font = '12px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+
+                // 多行文字处理
+                const lines = message.split(' ');
+                const lineHeight = 20;
+                const startY = 75 - (lines.length - 1) * lineHeight / 2;
+
+                lines.forEach((line, index) => {
+                    this.ctx.fillText(line, 100, startY + index * lineHeight);
+                });
             }
         }
 
@@ -699,6 +914,57 @@
          */
         const chartRenderer = new WaveformChart('waveform-chart');
         const roiRenderer = new RoiRenderer('roi-canvas');
+
+        // ROI截图功能
+        const roiScreenshotBtn = document.getElementById('roi-screenshot-btn');
+
+        function captureROIScreenshot() {
+            const canvas = document.getElementById('roi-canvas');
+            if (!canvas || !appState.roiData) {
+                alert('ROI数据不可用，无法截图');
+                return;
+            }
+
+            // 将Canvas转换为Blob
+            canvas.toBlob(function(blob) {
+                if (!blob) {
+                    alert('截图生成失败');
+                    return;
+                }
+
+                // 生成包含时间戳和信号值的文件名
+                const now = new Date();
+                const timestamp = now.getFullYear() +
+                    String(now.getMonth() + 1).padStart(2, '0') +
+                    String(now.getDate()).padStart(2, '0') + '_' +
+                    String(now.getHours()).padStart(2, '0') +
+                    String(now.getMinutes()).padStart(2, '0') +
+                    String(now.getSeconds()).padStart(2, '0');
+
+                const signalValue = appState.roiData.gray_value.toFixed(1);
+                const filename = `ROI_Screenshot_${timestamp}_Signal${signalValue}.png`;
+
+                // 创建下载链接
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                link.style.display = 'none';
+
+                // 触发下载
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                // 清理URL对象
+                URL.revokeObjectURL(url);
+
+                console.log(`ROI截图已保存: ${filename}`);
+            }, 'image/png');
+        }
+
+        // 绑定截图按钮点击事件
+        roiScreenshotBtn.addEventListener('click', captureROIScreenshot);
 
         // 更新 UI 元素
         function updateUI() {
@@ -732,9 +998,25 @@
                 peakEl.innerText = 'NULL';
             }
 
-            // ROI
+            // ROI配置状态
+            const roiStatusIndicator = document.getElementById('roi-status-indicator');
+            const roiStatusText = document.getElementById('roi-status-text');
+            if (appState.roiConfigured) {
+                roiStatusIndicator.className = 'indicator connected';
+                roiStatusText.innerText = '已配置';
+            } else {
+                roiStatusIndicator.className = 'indicator disconnected';
+                roiStatusText.innerText = '未配置';
+            }
+
+            // ROI数据
             if (appState.roiData) {
                 document.getElementById('roi-gray-value').innerText = appState.roiData.gray_value.toFixed(2);
+                roiScreenshotBtn.disabled = false;
+                roiScreenshotBtn.textContent = '📸 截图保存';
+            } else {
+                roiScreenshotBtn.disabled = true;
+                roiScreenshotBtn.textContent = '📸 截图保存 (无数据)';
             }
 
             // 检测状态
@@ -744,8 +1026,10 @@
             const isRunning = appState.detectionState === 'RUNNING';
             const isPaused = appState.detectionState === 'PAUSED';
             const isIdle = appState.detectionState === 'IDLE' || appState.detectionState === 'STOPPED';
+            const roiConfigured = appState.roiConfigured;
 
-            document.getElementById('start-btn').disabled = isRunning;
+            // 开始检测按钮：需要ROI已配置且不在运行状态
+            document.getElementById('start-btn').disabled = isRunning || !roiConfigured;
             document.getElementById('stop-btn').disabled = isIdle;
             document.getElementById('pause-btn').disabled = !isRunning;
             document.getElementById('resume-btn').disabled = !isPaused;
@@ -822,9 +1106,15 @@
 
         // 状态机控制
         async function handleControl(action) {
+            // 检查ROI配置状态（仅对开始检测）
+            if (action === 'start_detection' && !appState.roiConfigured) {
+                alert('请先配置ROI区域后再开始检测！');
+                return;
+            }
+
             // 先乐观更新UI
             const oldState = appState.detectionState;
-            
+
             let newState = oldState;
             if (action === 'start_detection') newState = 'RUNNING';
             if (action === 'stop_detection') newState = 'STOPPED';
@@ -854,13 +1144,158 @@
             ind.className = 'indicator connecting';
             txt.innerText = 'Connecting...';
 
-            setTimeout(() => {
+            setTimeout(async () => {
                 appState.connected = true;
                 updateUI();
-                
+
+                // 加载ROI配置
+                await loadRoiConfig();
+
                 // 启动动态轮询
                 updatePollingInterval();
             }, 1000);
+        }
+
+        /**
+         * 5. ROI相关函数
+         */
+        function updateRoiDisplay() {
+            // 获取输入值
+            const x1 = parseInt(document.getElementById('roi-x1').value) || 0;
+            const y1 = parseInt(document.getElementById('roi-y1').value) || 0;
+            const x2 = parseInt(document.getElementById('roi-x2').value) || 0;
+            const y2 = parseInt(document.getElementById('roi-y2').value) || 0;
+
+            // 计算中心点和尺寸
+            const centerX = Math.floor((x1 + x2) / 2);
+            const centerY = Math.floor((y1 + y2) / 2);
+            const width = Math.abs(x2 - x1);
+            const height = Math.abs(y2 - y1);
+
+            // 更新显示
+            document.getElementById('roi-center').textContent = `(${centerX}, ${centerY})`;
+            document.getElementById('roi-width').textContent = `${width} px`;
+            document.getElementById('roi-height').textContent = `${height} px`;
+        }
+
+        async function applyRoiConfig() {
+            try {
+                const x1 = parseInt(document.getElementById('roi-x1').value) || 0;
+                const y1 = parseInt(document.getElementById('roi-y1').value) || 0;
+                const x2 = parseInt(document.getElementById('roi-x2').value) || 0;
+                const y2 = parseInt(document.getElementById('roi-y2').value) || 0;
+
+                // 基本验证
+                if (x1 >= x2 || y1 >= y2) {
+                    alert('ROI坐标无效：x1必须小于x2，y1必须小于y2');
+                    return;
+                }
+
+                if (x2 - x1 < 10 || y2 - y1 < 10) {
+                    alert('ROI尺寸太小：最小尺寸为10x10像素');
+                    return;
+                }
+
+                // 发送API请求
+                const response = await ApiService.setRoiConfig(x1, y1, x2, y2);
+                if (response && response.success) {
+                    // 更新本地状态
+                    appState.roiConfig = response.config;
+                    appState.roiConfigured = true;
+                    updateUI();  // 更新UI状态
+                    console.log('ROI配置应用成功:', response.config);
+                } else {
+                    alert('ROI配置应用失败: ' + (response.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Apply ROI config error:', error);
+                alert('ROI配置应用失败: ' + error.message);
+            }
+        }
+
+        async function captureRoiScreenshot() {
+            try {
+                const captureBtn = document.getElementById('capture-roi-btn');
+                captureBtn.disabled = true;
+                captureBtn.textContent = '📸 截图中...';
+
+                const response = await ApiService.captureRoi();
+                if (response && response.success) {
+                    // 更新ROI显示
+                    if (response.roi_data) {
+                        roiRenderer.render(response.roi_data);
+                        document.getElementById('roi-gray-value').textContent = response.roi_data.gray_value.toFixed(1);
+                    }
+                    console.log('ROI截图成功:', response.message);
+
+                    // 可选：下载截图
+                    if (response.roi_data && response.roi_data.format === 'base64') {
+                        downloadRoiImage(response.roi_data.pixels, 'roi_capture.png');
+                    }
+                } else {
+                    alert('ROI截图失败: ' + (response.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('ROI capture error:', error);
+                alert('ROI截图失败: ' + error.message);
+            } finally {
+                const captureBtn = document.getElementById('capture-roi-btn');
+                captureBtn.disabled = false;
+                captureBtn.textContent = '📸 ROI截图';
+            }
+        }
+
+        function downloadRoiImage(base64Data, filename) {
+            try {
+                // 将hex字符串转换为base64
+                const binaryString = hexToBase64(base64Data);
+                const blob = new Blob([binaryString], { type: 'image/png' });
+                const url = URL.createObjectURL(blob);
+
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                console.log('ROI图像已下载:', filename);
+            } catch (error) {
+                console.error('下载ROI图像失败:', error);
+            }
+        }
+
+        function hexToBase64(hexString) {
+            const hexPairs = hexString.match(/[\da-f]{2}/gi) || [];
+            const bytes = new Uint8Array(hexPairs.map(pair => parseInt(pair, 16)));
+            return bytes;
+        }
+
+        async function loadRoiConfig() {
+            try {
+                const response = await ApiService.getRoiConfig();
+                if (response && response.success && response.config) {
+                    appState.roiConfig = response.config;
+                    // 如果配置不是默认值，则认为已配置
+                    const isDefaultConfig = (response.config.x1 === 0 && response.config.y1 === 0 &&
+                                            response.config.x2 === 200 && response.config.y2 === 150);
+                    appState.roiConfigured = !isDefaultConfig;
+
+                    // 更新UI输入框
+                    document.getElementById('roi-x1').value = response.config.x1;
+                    document.getElementById('roi-y1').value = response.config.y1;
+                    document.getElementById('roi-x2').value = response.config.x2;
+                    document.getElementById('roi-y2').value = response.config.y2;
+
+                    // 更新显示
+                    updateRoiDisplay();
+
+                    console.log('ROI配置加载成功:', response.config, '配置状态:', appState.roiConfigured);
+                }
+            } catch (error) {
+                console.error('加载ROI配置失败:', error);
+            }
         }
 
         /**
@@ -896,7 +1331,16 @@
             document.getElementById('stop-btn').addEventListener('click', () => handleControl('stop_detection'));
             document.getElementById('pause-btn').addEventListener('click', () => handleControl('pause_detection'));
             document.getElementById('resume-btn').addEventListener('click', () => handleControl('resume_detection'));
-            
+
+            // ROI设置控制
+            const roiInputs = ['roi-x1', 'roi-y1', 'roi-x2', 'roi-y2'];
+            roiInputs.forEach(id => {
+                document.getElementById(id).addEventListener('input', updateRoiDisplay);
+            });
+
+            document.getElementById('apply-roi-btn').addEventListener('click', applyRoiConfig);
+            document.getElementById('capture-roi-btn').addEventListener('click', captureRoiScreenshot);
+
             // 启动
             initConnection();
         });

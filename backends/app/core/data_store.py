@@ -9,7 +9,7 @@ from typing import Deque, List, Optional, Tuple
 import logging
 
 from ..config import settings
-from ..models import SystemStatus
+from ..models import SystemStatus, RoiConfig
 
 
 @dataclass
@@ -36,6 +36,10 @@ class DataStore:
         self._peak_signal: Optional[int] = None
         self._last_peak_signal: Optional[int] = None
         self._status: SystemStatus = SystemStatus.STOPPED
+
+        # ROI配置
+        self._roi_config: RoiConfig = RoiConfig(x1=0, y1=0, x2=200, y2=150)
+        self._roi_configured: bool = False  # 标记ROI是否已由用户配置
 
     # 写操作
     def add_frame(
@@ -120,11 +124,45 @@ class DataStore:
             self._baseline = 0.0
             self._peak_signal = None
             self._last_peak_signal = None
+            # 重置ROI配置状态
+            self._roi_config = RoiConfig(x1=0, y1=0, x2=200, y2=150)
+            self._roi_configured = False
         self._logger.warning("Data store has been reset")
 
     def get_last_peak_signal(self) -> Optional[int]:
         with self._lock:
             return self._last_peak_signal
+
+    # ROI配置操作
+    def set_roi_config(self, roi_config: RoiConfig) -> None:
+        """设置ROI配置"""
+        with self._lock:
+            if roi_config.validate_coordinates():
+                self._roi_config = roi_config
+                self._roi_configured = True  # 标记为用户已配置
+                self._logger.info(
+                    "ROI config updated: (%d,%d) -> (%d,%d), size: %dx%d, center: (%d,%d)",
+                    roi_config.x1, roi_config.y1, roi_config.x2, roi_config.y2,
+                    roi_config.width, roi_config.height, roi_config.center_x, roi_config.center_y
+                )
+            else:
+                self._logger.error("Invalid ROI config: coordinates validation failed")
+                raise ValueError("Invalid ROI coordinates")
+
+    def get_roi_config(self) -> RoiConfig:
+        """获取ROI配置"""
+        with self._lock:
+            return self._roi_config
+
+    def is_roi_configured(self) -> bool:
+        """检查ROI是否已由用户配置"""
+        with self._lock:
+            return self._roi_configured
+
+    def get_roi_status(self) -> Tuple[bool, RoiConfig]:
+        """获取ROI配置状态和配置"""
+        with self._lock:
+            return self._roi_configured, self._roi_config
 
 
 # 单例数据存储
