@@ -158,15 +158,7 @@ async def realtime_data(
             baseline=0.0,
         )
 
-    # 以最后一帧的时间为基准计算相对时间
-    series = [
-        TimeSeriesPoint(
-            t=(frame.timestamp - frames[0].timestamp).total_seconds(),
-            value=frame.value,
-        )
-        for frame in frames
-    ]
-
+    # 获取状态快照
     (
         _status,
         frame_count,
@@ -189,7 +181,7 @@ async def realtime_data(
                     width=roi_config.width,
                     height=roi_config.height,
                     pixels="roi_capture_failed",
-                    gray_value=0.0,
+                    gray_value=baseline,  # 使用基线值作为fallback
                     format="text",
                 )
         except Exception as e:
@@ -198,7 +190,7 @@ async def realtime_data(
                 width=roi_config.width,
                 height=roi_config.height,
                 pixels="roi_capture_error",
-                gray_value=0.0,
+                gray_value=baseline,  # 使用基线值作为fallback
                 format="text",
             )
     else:
@@ -207,17 +199,44 @@ async def realtime_data(
             width=0,
             height=0,
             pixels="roi_not_configured",
-            gray_value=0.0,
+            gray_value=baseline,  # 使用基线值
             format="text",
         )
 
+    # 生成时间序列数据
+    if roi_configured and roi_data.format == "base64":
+        # ROI已配置且有真实截图数据，使用ROI灰度值生成时间序列
+        series = []
+        interval = 1.0 / 60  # 60 FPS时间间隔
+        current_time = datetime.utcnow()
+
+        for i in range(count):
+            # 生成连续的时间点，最近的点在前
+            t = i * interval
+            # 使用ROI灰度值
+            value = roi_data.gray_value
+            series.append(TimeSeriesPoint(t=t, value=value))
+
+        # 更新current_value为ROI灰度值
+        current_value = roi_data.gray_value
+    else:
+        # ROI未配置或无真实数据，使用模拟数据
+        series = [
+            TimeSeriesPoint(
+                t=(frame.timestamp - frames[0].timestamp).total_seconds(),
+                value=frame.value,
+            )
+            for frame in frames
+        ]
+
     logger.debug(
-        "📊 Realtime data response: frame_count=%d points=%d last_value=%.3f peak_signal=%s baseline=%.3f",
+        "📊 Realtime data response: frame_count=%d points=%d last_value=%.3f peak_signal=%s baseline=%.3f data_source=%s",
         frame_count,
         len(series),
         series[-1].value if series else 0.0,
         str(peak_signal),
         baseline,
+        "roi_gray_value" if roi_configured and roi_data.format == "base64" else "simulated",
     )
 
     return RealtimeDataResponse(
