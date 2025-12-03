@@ -41,6 +41,13 @@ class DataStore:
         self._roi_config: RoiConfig = RoiConfig(x1=0, y1=0, x2=200, y2=150)
         self._roi_configured: bool = False  # 标记ROI是否已由用户配置
 
+        # 增强波峰检测信息
+        self._enhanced_peak_color: Optional[str] = None  # 'green' or 'red'
+        self._enhanced_peak_confidence: float = 0.0
+        self._enhanced_peak_threshold: float = 0.0
+        self._enhanced_in_peak_region: bool = False
+        self._enhanced_peak_frame_count: int = 0
+
     # 写操作
     def add_frame(
         self,
@@ -163,6 +170,62 @@ class DataStore:
         """获取ROI配置状态和配置"""
         with self._lock:
             return self._roi_configured, self._roi_config
+
+    def add_enhanced_peak(
+        self,
+        peak_signal: Optional[int],
+        peak_color: Optional[str],
+        peak_confidence: float,
+        threshold: float,
+        in_peak_region: bool,
+        frame_count: int
+    ) -> None:
+        """添加增强波峰检测信息"""
+        with self._lock:
+            self._peak_signal = peak_signal
+            if peak_signal == 1:
+                self._last_peak_signal = peak_signal
+            elif peak_signal is None and self._last_peak_signal == 1:
+                self._last_peak_signal = None
+
+            self._enhanced_peak_color = peak_color
+            self._enhanced_peak_confidence = peak_confidence
+            self._enhanced_peak_threshold = threshold
+            self._enhanced_in_peak_region = in_peak_region
+            self._enhanced_peak_frame_count = frame_count
+
+    def get_enhanced_peak_status(self) -> Tuple[Optional[str], float, float, bool, int]:
+        """获取增强波峰检测状态"""
+        with self._lock:
+            return (
+                self._enhanced_peak_color,
+                self._enhanced_peak_confidence,
+                self._enhanced_peak_threshold,
+                self._enhanced_in_peak_region,
+                self._enhanced_peak_frame_count
+            )
+
+    def get_enhanced_status_snapshot(self) -> Tuple[
+        int, float, float, Optional[int], Optional[int], float,
+        Optional[str], float, float, bool, int, bool, RoiConfig
+    ]:
+        """获取包含增强波峰信息的状态快照"""
+        with self._lock:
+            return (
+                self._frame_count,
+                self._current_value,
+                self._baseline,
+                self._peak_signal,
+                self._last_peak_signal,
+                float(self._status.value),
+                self._enhanced_peak_color,
+                self._enhanced_peak_confidence,
+                self._enhanced_peak_threshold,
+                self._enhanced_in_peak_region,
+                self._enhanced_peak_frame_count,
+                self._roi_configured,
+                self._roi_config
+            )
 
 
 # 单例数据存储

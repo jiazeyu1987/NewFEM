@@ -11,18 +11,35 @@ import logging
 from ..config import settings
 from ..models import SystemStatus
 from .data_store import data_store
+from .enhanced_peak_detector import EnhancedPeakDetector, PeakDetectionConfig
+from .roi_capture import roi_capture_service
 
 
 class DataProcessor:
     """
-    模拟 60 FPS 数据生成和简单波峰检测的后台线程。
-    实际算法可根据需求进一步替换。
+    增强型数据处理器，集成ROI灰度值和三参数波峰检测算法。
+    支持模拟信号和真实ROI数据的处理。
     """
 
     def __init__(self) -> None:
         self._logger = logging.getLogger(self.__class__.__name__)
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
+        self._frame_count = 0
+
+        # 初始化增强波峰检测器
+        peak_config = PeakDetectionConfig(
+            threshold=settings.peak_threshold,
+            margin_frames=settings.peak_margin_frames,
+            difference_threshold=settings.peak_difference_threshold,
+            min_region_length=settings.peak_min_region_length
+        )
+        self._enhanced_detector = EnhancedPeakDetector(peak_config)
+
+        self._logger.info("DataProcessor initialized with enhanced peak detection")
+        self._logger.info(f"Peak detection config: threshold={peak_config.threshold}, "
+                         f"margin_frames={peak_config.margin_frames}, "
+                         f"difference_threshold={peak_config.difference_threshold}")
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -46,36 +63,76 @@ class DataProcessor:
 
         while not self._stop_event.is_set():
             start_time = time.perf_counter()
+            self._frame_count += 1
 
-            # 简单模拟一个带噪声的波形信号
-            # 例如基于正弦波 + 随机扰动，并在阈值上方触发 peak_signal
-            signal = base_value + 10.0 * math.sin(2 * math.pi * 0.5 * t)
+            # 获取ROI配置状态
+            roi_configured = data_store.is_roi_configured()
+            roi_config = data_store.get_roi_config()
 
-            # 简单峰值检测：当前值相对基线超过阈值即认为有峰
-            # 注意这里先用前一轮的 baseline 进行判断，简化实现
-            _, _, _, _, _, baseline = data_store.get_status_snapshot()
-            threshold = 8.0
-            peak_signal: Optional[int] = None
-            if signal - baseline > threshold:
-                peak_signal = 1
-                self._logger.info(
-                    "🔴 PEAK DETECTED! signal=%.3f baseline=%.3f threshold=%.3f difference=%.3f",
-                    signal,
-                    baseline,
-                    threshold,
-                    signal - baseline
+            # 根据ROI配置状态选择数据源
+            if roi_configured:
+                # 使用真实ROI数据
+                roi_data = roi_capture_service.capture_roi(roi_config)
+                if roi_data and roi_data.gray_value > 0:
+                    signal_value = roi_data.gray_value
+                    data_source = "ROI"
+                else:
+                    # ROI截图失败，回退到模拟数据
+                    signal_value = base_value + 10.0 * math.sin(2 * math.pi * 0.5 * t)
+                    data_source = "Fallback"
+            else:
+                # 使用模拟数据
+                signal_value = base_value + 10.0 * math.sin(2 * math.pi * 0.5 * t)
+                data_source = "Simulated"
+
+            # 使用增强波峰检测器处理数据
+            if roi_configured:
+                # ROI配置时使用增强检测
+                peak_result = self._enhanced_detector.process_frame(signal_value, self._frame_count)
+                peak_signal = peak_result['peak_signal']
+
+                # 存储增强波峰信息到DataStore
+                data_store.add_enhanced_peak(
+                    peak_signal=peak_signal,
+                    peak_color=peak_result.get('peak_color'),
+                    peak_confidence=peak_result.get('peak_confidence', 0.0),
+                    threshold=peak_result.get('threshold', 0.0),
+                    in_peak_region=peak_result.get('in_peak_region', False),
+                    frame_count=self._frame_count
+                )
+
+                if peak_signal == 1:
+                    peak_color = peak_result.get('peak_color', 'unknown')
+                    self._logger.info(
+                        f"🎯 ENHANCED PEAK DETECTED! source={data_source} "
+                        f"value={signal_value:.1f} color={peak_color} "
+                        f"frame={self._frame_count}"
+                    )
+            else:
+                # ROI未配置时使用简单检测（向后兼容）
+                _, _, _, _, _, baseline = data_store.get_status_snapshot()
+                threshold = 8.0
+                peak_signal: Optional[int] = None
+                if signal_value - baseline > threshold:
+                    peak_signal = 1
+
+                # 清除增强波峰信息
+                data_store.add_enhanced_peak(
+                    peak_signal=peak_signal,
+                    peak_color=None,
+                    peak_confidence=0.0,
+                    threshold=0.0,
+                    in_peak_region=False,
+                    frame_count=self._frame_count
                 )
 
             now = datetime.utcnow()
-            data_store.add_frame(value=signal, timestamp=now, peak_signal=peak_signal)
+            data_store.add_frame(value=signal_value, timestamp=now, peak_signal=peak_signal)
 
-            # 高频信号生成日志改为DEBUG级别，避免控制台噪音
+            # 高频信号生成日志改为DEBUG级别
             self._logger.debug(
-                "📊 Signal Generated: t=%.3f value=%.3f baseline=%.3f peak_signal=%s",
-                t,
-                signal,
-                baseline,
-                str(peak_signal) if peak_signal is not None else "null"
+                f"📊 Signal Generated: source={data_source} value={signal_value:.1f} "
+                f"frame={self._frame_count} peak_signal={peak_signal}"
             )
 
             t += interval

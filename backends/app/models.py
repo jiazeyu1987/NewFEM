@@ -51,6 +51,7 @@ class RealtimeDataResponse(BaseModel):
     series: List[TimeSeriesPoint]
     roi_data: RoiData
     peak_signal: Optional[int]
+    enhanced_peak: Optional[EnhancedPeakSignal] = None
     baseline: float
 
 
@@ -183,6 +184,39 @@ class RoiFrameRateResponse(BaseModel):
     message: str = "ROI frame rate updated successfully"
 
 
+class PeakRegionData(BaseModel):
+    """波峰区域数据模型"""
+    start_frame: int
+    end_frame: int
+    peak_frame: int
+    max_value: float
+    color: str  # 'green' or 'red'
+    confidence: float
+    difference: float
+
+
+class PeakDetectionConfigResponse(BaseModel):
+    """波峰检测配置响应模型"""
+    type: str = "peak_detection_config"
+    timestamp: datetime
+    threshold: float
+    margin_frames: int
+    difference_threshold: float
+    min_region_length: int
+    success: bool = True
+    message: str = "Peak detection configuration retrieved successfully"
+
+
+class EnhancedPeakSignal(BaseModel):
+    """增强波峰信号模型"""
+    signal: Optional[int]  # 1 for peak, None for no peak
+    color: Optional[str]  # 'green' or 'red'
+    confidence: float
+    threshold: float
+    in_peak_region: bool
+    frame_count: int
+
+
 class AnalyzeResponse(BaseModel):
     has_hem: bool
     events: List[AnalyzeEvent]
@@ -190,4 +224,6 @@ class AnalyzeResponse(BaseModel):
     series: List[AnalyzeSeriesPoint]
     realtime: bool
     peak_signal: Optional[int]
+    enhanced_peak: Optional[EnhancedPeakSignal] = None
+    peak_regions: List[PeakRegionData] = []
     frame_count: int

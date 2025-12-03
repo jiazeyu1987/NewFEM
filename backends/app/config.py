@@ -24,6 +24,12 @@ class AppConfig(BaseSettings):
     roi_frame_rate: int = 2  # ROI截图和识别的频率 (FPS)
     roi_update_interval: float = 0.5  # ROI更新间隔 (秒)
 
+    # 波峰检测配置
+    peak_threshold: float = 105.0          # 绝对阈值：ROI灰度值超过此值进入波峰区域
+    peak_margin_frames: int = 5           # 边界扩展帧数：波峰区域前后扩展的帧数
+    peak_difference_threshold: float = 2.1 # 颜色分类阈值：用于绿色/红色波峰分类
+    peak_min_region_length: int = 3       # 最小波峰区域长度：小于此值的区域被忽略
+
     # 安全配置
     password: str = "31415"
     enable_cors: bool = True

@@ -402,7 +402,74 @@
             </div>
         </div>
 
-        <!-- 3.5 检测控制面板 -->
+        <!-- 3.6 波峰检测配置面板 -->
+        <div class="panel">
+            <div class="panel-header">波峰检测设置</div>
+            <div class="panel-content">
+                <!-- 绝对阈值 -->
+                <div class="status-row">
+                    <span>绝对阈值:</span>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <input type="number" id="peak-threshold" class="roi-input" value="105" min="50" max="255" step="0.1" style="width: 80px;">
+                        <span class="status-value">灰度值 ≥ 阈值触发波峰</span>
+                    </div>
+                </div>
+
+                <!-- 边界扩展帧数 -->
+                <div class="status-row">
+                    <span>边界扩展:</span>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <input type="number" id="peak-margin-frames" class="roi-input" value="5" min="1" max="20" style="width: 80px;">
+                        <span class="status-value">波峰区域前后扩展帧数</span>
+                    </div>
+                </div>
+
+                <!-- 颜色分类阈值 -->
+                <div class="status-row">
+                    <span>分类阈值:</span>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <input type="number" id="peak-difference-threshold" class="roi-input" value="2.1" min="0.1" max="10" step="0.1" style="width: 80px;">
+                        <span class="status-value">
+                            <span style="color: #4ec9b0;">🟢</span> 差值>阈值
+                            <span style="color: #f44747;">🔴</span> 差值≤阈值
+                        </span>
+                    </div>
+                </div>
+
+                <!-- 最小区域长度 -->
+                <div class="status-row">
+                    <span>最小区域:</span>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <input type="number" id="peak-min-region-length" class="roi-input" value="3" min="1" max="20" style="width: 80px;">
+                        <span class="status-value">最小波峰区域长度（帧）</span>
+                    </div>
+                </div>
+
+                <hr style="border: 1px solid var(--border-color); margin: 10px 0;">
+
+                <!-- 波峰检测状态 -->
+                <div class="status-row">
+                    <span>检测状态:</span>
+                    <div>
+                        <span id="peak-status-indicator" class="indicator disconnected"></span>
+                        <span id="peak-status-text">未激活</span>
+                    </div>
+                </div>
+
+                <div class="status-row">
+                    <span>当前颜色:</span>
+                    <div id="current-peak-color" style="display: flex; align-items: center; gap: 5px;">
+                        <span class="status-value">-</span>
+                    </div>
+                </div>
+
+                <div class="control-group" style="margin-top: 10px;">
+                    <button id="apply-peak-config-btn" style="width: 100%; height: 30px; font-size: 12px;">应用波峰配置</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3.7 检测控制面板 -->
         <div class="panel">
             <div class="panel-header">控制台</div>
             <div class="panel-content">
@@ -478,6 +545,13 @@
             roiUpdateInterval: 500,  // ROI更新间隔（毫秒）
             lastRoiUpdate: 0,        // 上次ROI更新时间
             roiFrameRate: 2,         // ROI帧率（FPS）
+            // 波峰检测配置
+            peakConfig: {
+                threshold: 105.0,
+                margin_frames: 5,
+                difference_threshold: 2.1,
+                min_region_length: 3
+            },
             // 内部使用的配置
             maxDataPoints: 100,
             pollingIntervals: {
@@ -714,6 +788,61 @@
                 } catch(e) {
                     console.error("Set ROI frame rate error:", e);
                     return { success: false, error: str(e) };
+                }
+            },
+
+            // 波峰检测配置API
+            async getPeakDetectionConfig() {
+                if (appState.mockMode) {
+                    return Promise.resolve({
+                        type: "peak_detection_config",
+                        success: true,
+                        threshold: 105.0,
+                        margin_frames: 5,
+                        difference_threshold: 2.1,
+                        min_region_length: 3,
+                        message: "Mock: Peak detection config retrieved"
+                    });
+                }
+
+                try {
+                    const response = await fetch(`${appState.serverUrl}/peak-detection/config`);
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return await response.json();
+                } catch(e) {
+                    console.error("Get peak detection config error:", e);
+                    return { success: false, error: e.message };
+                }
+            },
+
+            async setPeakDetectionConfig(config) {
+                if (appState.mockMode) {
+                    return Promise.resolve({
+                        type: "peak_detection_config",
+                        success: true,
+                        ...config,
+                        message: "Mock: Peak detection config updated successfully"
+                    });
+                }
+
+                const formData = new URLSearchParams();
+                if (config.threshold !== undefined) formData.append('threshold', config.threshold);
+                if (config.margin_frames !== undefined) formData.append('margin_frames', config.margin_frames);
+                if (config.difference_threshold !== undefined) formData.append('difference_threshold', config.difference_threshold);
+                if (config.min_region_length !== undefined) formData.append('min_region_length', config.min_region_length);
+                formData.append('password', '31415');
+
+                try {
+                    const response = await fetch(`${appState.serverUrl}/peak-detection/config`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: formData
+                    });
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return await response.json();
+                } catch(e) {
+                    console.error("Set peak detection config error:", e);
+                    return { success: false, error: e.message };
                 }
             }
         };
@@ -1124,6 +1253,13 @@
                     }
                 }
 
+                // 更新波峰检测状态显示
+                if (data.enhanced_peak) {
+                    updatePeakDetectionStatus(data.enhanced_peak);
+                } else {
+                    updatePeakDetectionStatus(null);
+                }
+
                 // 渲染更新
                 chartRenderer.draw();
                 roiRenderer.render(data.roi_data);
@@ -1177,6 +1313,9 @@
 
                 // 加载ROI配置
                 await loadRoiConfig();
+
+                // 加载波峰检测配置
+                await loadPeakDetectionConfig();
 
                 // 启动动态轮询
                 updatePollingInterval();
@@ -1310,6 +1449,191 @@
             }
         }
 
+        /**
+         * 7. 波峰检测配置函数
+         */
+        function savePeakDetectionConfigToLocalStorage(config) {
+            try {
+                const data = {
+                    ...config,
+                    lastUpdated: new Date().toISOString()
+                };
+                localStorage.setItem('newfem_peak_detection_config', JSON.stringify(data));
+                console.log('Peak detection config saved to localStorage:', data);
+            } catch (error) {
+                console.warn('Failed to save peak detection config to localStorage:', error);
+            }
+        }
+
+        function loadPeakDetectionConfigFromLocalStorage() {
+            try {
+                const stored = localStorage.getItem('newfem_peak_detection_config');
+                if (stored) {
+                    const config = JSON.parse(stored);
+                    console.log('Peak detection config loaded from localStorage:', config);
+                    return config;
+                }
+                return null;
+            } catch (error) {
+                console.warn('Failed to load peak detection config from localStorage:', error);
+                return null;
+            }
+        }
+
+        async function loadPeakDetectionConfig() {
+            try {
+                // 首先尝试从localStorage加载配置
+                let localConfig = loadPeakDetectionConfigFromLocalStorage();
+
+                if (localConfig) {
+                    // 使用本地配置更新UI
+                    document.getElementById('peak-threshold').value = localConfig.threshold;
+                    document.getElementById('peak-margin-frames').value = localConfig.margin_frames;
+                    document.getElementById('peak-difference-threshold').value = localConfig.difference_threshold;
+                    document.getElementById('peak-min-region-length').value = localConfig.min_region_length;
+
+                    // 更新应用状态
+                    appState.peakConfig = {
+                        threshold: localConfig.threshold,
+                        margin_frames: localConfig.margin_frames,
+                        difference_threshold: localConfig.difference_threshold,
+                        min_region_length: localConfig.min_region_length
+                    };
+
+                    // 同时应用到后端以保持同步
+                    const backendResponse = await ApiService.setPeakDetectionConfig({
+                        threshold: localConfig.threshold,
+                        margin_frames: localConfig.margin_frames,
+                        difference_threshold: localConfig.difference_threshold,
+                        min_region_length: localConfig.min_region_length
+                    });
+
+                    if (backendResponse && backendResponse.success) {
+                        console.log('波峰检测配置从本地加载并同步到后端成功:', localConfig);
+                    } else {
+                        console.warn('波峰检测配置从本地加载但同步到后端失败:', backendResponse?.error);
+                    }
+                } else {
+                    // 本地无配置，从API加载默认配置
+                    const response = await ApiService.getPeakDetectionConfig();
+                    if (response && response.success) {
+                        // 更新UI输入框
+                        document.getElementById('peak-threshold').value = response.threshold;
+                        document.getElementById('peak-margin-frames').value = response.margin_frames;
+                        document.getElementById('peak-difference-threshold').value = response.difference_threshold;
+                        document.getElementById('peak-min-region-length').value = response.min_region_length;
+
+                        // 更新应用状态
+                        appState.peakConfig = {
+                            threshold: response.threshold,
+                            margin_frames: response.margin_frames,
+                            difference_threshold: response.difference_threshold,
+                            min_region_length: response.min_region_length
+                        };
+
+                        // 保存到localStorage供下次使用
+                        savePeakDetectionConfigToLocalStorage(appState.peakConfig);
+
+                        console.log('波峰检测配置从API加载成功:', response);
+                    }
+                }
+            } catch (error) {
+                console.error('加载波峰检测配置失败:', error);
+                // 发生错误时使用默认配置
+                const defaultConfig = appState.peakConfig;
+                document.getElementById('peak-threshold').value = defaultConfig.threshold;
+                document.getElementById('peak-margin-frames').value = defaultConfig.margin_frames;
+                document.getElementById('peak-difference-threshold').value = defaultConfig.difference_threshold;
+                document.getElementById('peak-min-region-length').value = defaultConfig.min_region_length;
+            }
+        }
+
+        async function applyPeakDetectionConfig() {
+            try {
+                const threshold = parseFloat(document.getElementById('peak-threshold').value) || 105.0;
+                const marginFrames = parseInt(document.getElementById('peak-margin-frames').value) || 5;
+                const differenceThreshold = parseFloat(document.getElementById('peak-difference-threshold').value) || 2.1;
+                const minRegionLength = parseInt(document.getElementById('peak-min-region-length').value) || 3;
+
+                // 验证参数范围
+                if (threshold < 50.0 || threshold > 255.0) {
+                    alert('绝对阈值无效：必须在50.0-255.0之间');
+                    return;
+                }
+
+                if (marginFrames < 1 || marginFrames > 20) {
+                    alert('边界扩展帧数无效：必须在1-20之间');
+                    return;
+                }
+
+                if (differenceThreshold < 0.1 || differenceThreshold > 10.0) {
+                    alert('颜色分类阈值无效：必须在0.1-10.0之间');
+                    return;
+                }
+
+                if (minRegionLength < 1 || minRegionLength > 20) {
+                    alert('最小区域长度无效：必须在1-20之间');
+                    return;
+                }
+
+                // 发送API请求
+                const config = {
+                    threshold: threshold,
+                    margin_frames: marginFrames,
+                    difference_threshold: differenceThreshold,
+                    min_region_length: minRegionLength
+                };
+
+                const response = await ApiService.setPeakDetectionConfig(config);
+                if (response && response.success) {
+                    // 更新应用状态
+                    appState.peakConfig = config;
+
+                    // 保存配置到localStorage
+                    savePeakDetectionConfigToLocalStorage(config);
+
+                    console.log('波峰检测配置应用成功:', response);
+                    // 移除成功弹框，实现无干扰应用
+                } else {
+                    alert('波峰检测配置应用失败: ' + (response?.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Apply peak detection config error:', error);
+                alert('波峰检测配置应用失败: ' + error.message);
+            }
+        }
+
+        function updatePeakDetectionStatus(peakData) {
+            if (!peakData) {
+                document.getElementById('peak-status-indicator').className = 'indicator disconnected';
+                document.getElementById('peak-status-text').textContent = '未激活';
+                document.getElementById('current-peak-color').innerHTML = '<span class="status-value">-</span>';
+                return;
+            }
+
+            // 更新状态指示器
+            if (peakData.signal === 1) {
+                document.getElementById('peak-status-indicator').className = 'indicator running';
+                document.getElementById('peak-status-text').textContent = '检测到波峰';
+
+                // 更新颜色显示
+                if (peakData.color === 'green') {
+                    document.getElementById('current-peak-color').innerHTML =
+                        '<span style="color: #4ec9b0; font-weight: bold;">🟢 绿色波峰 (稳定)</span>';
+                } else if (peakData.color === 'red') {
+                    document.getElementById('current-peak-color').innerHTML =
+                        '<span style="color: #f44747; font-weight: bold;">🔴 红色波峰 (可能不稳定)</span>';
+                } else {
+                    document.getElementById('current-peak-color').innerHTML =
+                        '<span class="status-value">波峰 (颜色未知)</span>';
+                }
+            } else {
+                document.getElementById('peak-status-indicator').className = 'indicator connecting';
+                document.getElementById('peak-status-text').textContent = '监控中';
+                document.getElementById('current-peak-color').innerHTML = '<span class="status-value">-</span>';
+            }
+        }
+
         function updateRoiFrameRateDisplay() {
             const frameRate = parseInt(document.getElementById('roi-frame-rate').value) || 2;
             document.getElementById('roi-fps-display').textContent = `${frameRate} FPS`;
@@ -1392,6 +1716,9 @@
             // ROI帧率控制
             document.getElementById('roi-frame-rate').addEventListener('input', updateRoiFrameRateDisplay);
             document.getElementById('roi-frame-rate').addEventListener('change', applyRoiFrameRate);
+
+            // 波峰检测配置控制
+            document.getElementById('apply-peak-config-btn').addEventListener('click', applyPeakDetectionConfig);
 
             // 启动
             initConnection();

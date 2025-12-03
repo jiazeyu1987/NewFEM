@@ -30,6 +30,7 @@ from ..models import (
     ErrorDetails,
     ErrorResponse,
     HealthResponse,
+    PeakDetectionConfigResponse,
     PeakSignalResponse,
     RealtimeDataResponse,
     RoiCaptureResponse,
@@ -649,6 +650,124 @@ async def set_roi_frame_rate(
         frame_rate=frame_rate,
         success=True,
         message=f"ROI frame rate updated to {frame_rate} FPS"
+    )
+
+
+# 波峰检测配置端点
+@router.get("/peak-detection/config", response_model=PeakDetectionConfigResponse)
+async def get_peak_detection_config() -> PeakDetectionConfigResponse:
+    """获取当前波峰检测配置"""
+    return PeakDetectionConfigResponse(
+        timestamp=datetime.utcnow(),
+        threshold=settings.peak_threshold,
+        margin_frames=settings.peak_margin_frames,
+        difference_threshold=settings.peak_difference_threshold,
+        min_region_length=settings.peak_min_region_length,
+        success=True,
+        message="Peak detection configuration retrieved successfully"
+    )
+
+
+@router.post("/peak-detection/config", response_model=PeakDetectionConfigResponse)
+async def set_peak_detection_config(
+    threshold: Optional[float] = Form(None),
+    margin_frames: Optional[int] = Form(None),
+    difference_threshold: Optional[float] = Form(None),
+    min_region_length: Optional[int] = Form(None)
+) -> PeakDetectionConfigResponse:
+    """设置波峰检测配置参数"""
+    logger.info("🔧 Peak detection configuration update requested")
+
+    # 验证和更新配置参数
+    updated_fields = []
+
+    if threshold is not None:
+        if not (50.0 <= threshold <= 255.0):
+            error = ErrorResponse(
+                timestamp=datetime.utcnow(),
+                error_code="INVALID_THRESHOLD",
+                error_message="Threshold must be between 50.0 and 255.0",
+                details=ErrorDetails(
+                    parameter="threshold",
+                    value=threshold,
+                    constraint="Range: 50.0-255.0"
+                )
+            )
+            return JSONResponse(status_code=400, content=error.model_dump(mode='json'))
+        settings.peak_threshold = threshold
+        updated_fields.append(f"threshold={threshold}")
+
+    if margin_frames is not None:
+        if not (1 <= margin_frames <= 20):
+            error = ErrorResponse(
+                timestamp=datetime.utcnow(),
+                error_code="INVALID_MARGIN_FRAMES",
+                error_message="Margin frames must be between 1 and 20",
+                details=ErrorDetails(
+                    parameter="margin_frames",
+                    value=margin_frames,
+                    constraint="Range: 1-20"
+                )
+            )
+            return JSONResponse(status_code=400, content=error.model_dump(mode='json'))
+        settings.peak_margin_frames = margin_frames
+        updated_fields.append(f"margin_frames={margin_frames}")
+
+    if difference_threshold is not None:
+        if not (0.1 <= difference_threshold <= 10.0):
+            error = ErrorResponse(
+                timestamp=datetime.utcnow(),
+                error_code="INVALID_DIFFERENCE_THRESHOLD",
+                error_message="Difference threshold must be between 0.1 and 10.0",
+                details=ErrorDetails(
+                    parameter="difference_threshold",
+                    value=difference_threshold,
+                    constraint="Range: 0.1-10.0"
+                )
+            )
+            return JSONResponse(status_code=400, content=error.model_dump(mode='json'))
+        settings.peak_difference_threshold = difference_threshold
+        updated_fields.append(f"difference_threshold={difference_threshold}")
+
+    if min_region_length is not None:
+        if not (1 <= min_region_length <= 20):
+            error = ErrorResponse(
+                timestamp=datetime.utcnow(),
+                error_code="INVALID_MIN_REGION_LENGTH",
+                error_message="Minimum region length must be between 1 and 20",
+                details=ErrorDetails(
+                    parameter="min_region_length",
+                    value=min_region_length,
+                    constraint="Range: 1-20"
+                )
+            )
+            return JSONResponse(status_code=400, content=error.model_dump(mode='json'))
+        settings.peak_min_region_length = min_region_length
+        updated_fields.append(f"min_region_length={min_region_length}")
+
+    # 如果有更新，重启处理器以应用新配置
+    if updated_fields and hasattr(processor, '_enhanced_detector'):
+        from ..core.enhanced_peak_detector import PeakDetectionConfig
+        new_config = PeakDetectionConfig(
+            threshold=settings.peak_threshold,
+            margin_frames=settings.peak_margin_frames,
+            difference_threshold=settings.peak_difference_threshold,
+            min_region_length=settings.peak_min_region_length
+        )
+        processor._enhanced_detector.update_config(new_config)
+        logger.info("🔧 Enhanced peak detector configuration updated: %s", ", ".join(updated_fields))
+
+    fields_str = ", ".join(updated_fields) if updated_fields else "no changes"
+    logger.info("✅ Peak detection configuration updated: %s", fields_str)
+
+    return PeakDetectionConfigResponse(
+        timestamp=datetime.utcnow(),
+        threshold=settings.peak_threshold,
+        margin_frames=settings.peak_margin_frames,
+        difference_threshold=settings.peak_difference_threshold,
+        min_region_length=settings.peak_min_region_length,
+        success=True,
+        message=f"Peak detection configuration updated: {fields_str}"
     )
 
 
