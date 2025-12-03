@@ -29,8 +29,6 @@ class RoiCaptureService:
         self._last_capture_time = 0.0
         self._cached_roi_data: Optional[RoiData] = None
         self._last_roi_config: Optional[RoiConfig] = None
-        self._last_gray_value: float = 0.0  # 用于内容变化检测
-        self._content_change_threshold = 2.0  # 灰度值变化阈值
 
     def capture_screen(self) -> Optional[Image.Image]:
         """
@@ -65,18 +63,17 @@ class RoiCaptureService:
 
             current_time = time.time()
 
-            # 检查是否可以使用缓存（时间和配置未变化）
+            # 简化的缓存机制：只基于时间间隔和配置变化
             time_valid = current_time - self._last_capture_time < self._cache_interval
             config_unchanged = (self._last_roi_config is not None and
                                self._roi_config_changed(roi_config, self._last_roi_config) == False)
 
+            # 只有在缓存有效且配置未变化时才使用缓存
             if (self._cached_roi_data is not None and time_valid and config_unchanged):
-                # 检查内容是否有显著变化
-                if self._cached_roi_data and abs(self._cached_roi_data.gray_value - self._last_gray_value) < self._content_change_threshold:
-                    self._logger.debug("Using cached ROI data (no significant content change)")
-                    return self._cached_roi_data
-                else:
-                    self._logger.debug("Content changed significantly, forcing new capture")
+                self._logger.debug(f"Using cached ROI data (age: {current_time - self._last_capture_time:.3f}s)")
+                return self._cached_roi_data
+            else:
+                self._logger.debug(f"Forcing new ROI capture - time_valid: {time_valid}, config_unchanged: {config_unchanged}")
 
             # 执行真实的截图操作
             roi_data = self._capture_roi_internal(roi_config)
@@ -86,8 +83,27 @@ class RoiCaptureService:
                 self._cached_roi_data = roi_data
                 self._last_roi_config = roi_config
                 self._last_capture_time = current_time
-                self._last_gray_value = roi_data.gray_value
-                self._logger.debug("ROI captured and cached (gray_value=%.2f)", roi_data.gray_value)
+                self._logger.info("ROI captured successfully (gray_value=%.2f)", roi_data.gray_value)
+
+                # 集成历史存储 - 保存ROI帧到DataStore
+                try:
+                    from ..core.data_store import data_store
+                    # 获取当前主信号帧数
+                    _, main_frame_count, _, _, _, _ = data_store.get_status_snapshot()
+
+                    # 添加ROI历史帧
+                    roi_frame = data_store.add_roi_frame(
+                        gray_value=roi_data.gray_value,
+                        roi_config=roi_config,
+                        frame_count=main_frame_count,
+                        capture_duration=self._cache_interval
+                    )
+
+                    self._logger.info("ROI frame added to history: index=%d, gray_value=%.2f, main_frame=%d",
+                                      roi_frame.index, roi_frame.gray_value, main_frame_count)
+
+                except Exception as e:
+                    self._logger.error("Failed to add ROI frame to history: %s", str(e))
 
             return roi_data
 

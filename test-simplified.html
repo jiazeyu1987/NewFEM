@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>简化界面测试 - 去除波峰检测</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1e1e1e;
+            color: #cccccc;
+            margin: 20px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .header {
+            background-color: #252526;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #3e3e42;
+        }
+        .content {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+        }
+        .sidebar {
+            background-color: #252526;
+            border: 1px solid #3e3e42;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .main-area {
+            background-color: #252526;
+            border: 1px solid #3e3e42;
+            border-radius: 8px;
+            padding: 15px;
+            min-height: 500px;
+        }
+        .panel {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #3e3e42;
+        }
+        .panel:last-child {
+            border-bottom: none;
+        }
+        .panel h4 {
+            margin: 0 0 10px 0;
+            color: #ffffff;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 0;
+            font-size: 12px;
+        }
+        .status-value {
+            color: #ffffff;
+            font-family: 'Consolas', 'Courier New', monospace;
+        }
+        .control-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        button {
+            background-color: #007acc;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 12px;
+            border-radius: 2px;
+        }
+        button:hover {
+            background-color: #0062a3;
+        }
+        button:disabled {
+            background-color: #3a3a3a;
+            color: #888;
+            cursor: not-allowed;
+        }
+        button.danger {
+            background-color: #a1260d;
+        }
+        button.danger:hover {
+            background-color: #c93312;
+        }
+        .success-message {
+            background-color: rgba(78, 201, 176, 0.1);
+            color: #4ec9b0;
+            border: 1px solid #4ec9b0;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .removed-features {
+            background-color: rgba(244, 135, 113, 0.1);
+            color: #f48771;
+            border: 1px solid #f48771;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .chart-container {
+            background-color: #1e1e1e;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 NewFEM 简化界面测试</h1>
+            <div class="success-message">
+                ✅ 已成功去除所有波峰检测相关功能
+            </div>
+            <div class="removed-features">
+                🗑️ 已移除的功能：
+                <ul>
+                    <li>波峰检测配置面板</li>
+                    <li>波峰检测状态显示</li>
+                    <li>波峰检测API调用</li>
+                    <li>波峰信号处理逻辑</li>
+                    <li>波峰检测相关事件监听器</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="sidebar">
+                <!-- 系统状态面板 -->
+                <div class="panel">
+                    <h4>系统状态</h4>
+                    <div class="status-row">
+                        <span>连接状态</span>
+                        <span class="status-value">Connected</span>
+                    </div>
+                    <div class="status-row">
+                        <span>帧数计数</span>
+                        <span class="status-value">0</span>
+                    </div>
+                    <div class="status-row">
+                        <span>当前值</span>
+                        <span class="status-value">0.00</span>
+                    </div>
+                    <div class="status-row">
+                        <span>基线值</span>
+                        <span class="status-value">120.00</span>
+                    </div>
+                    <div class="status-row">
+                        <span>缓冲区</span>
+                        <span class="status-value">0</span>
+                    </div>
+                    <div class="status-row">
+                        <span>FPS</span>
+                        <span class="status-value">0 Hz</span>
+                    </div>
+                </div>
+
+                <!-- 显示控制面板 -->
+                <div class="panel">
+                    <h4>显示控制</h4>
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                            <input type="checkbox" checked> 显示网格
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                            <input type="checkbox" checked> 显示基线
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" checked> 显示数据点
+                        </label>
+                    </div>
+                    <div>
+                        <div class="status-row">
+                            <span>Y轴缩放</span>
+                            <span class="status-value">1.0x</span>
+                        </div>
+                        <input type="range" min="0.5" max="3.0" step="0.1" value="1.0" style="width: 100%;">
+                    </div>
+                </div>
+
+                <!-- ROI监控面板 -->
+                <div class="panel">
+                    <h4>ROI 监控</h4>
+                    <div style="text-align: center;">
+                        <div style="background-color: #000; border: 1px solid #3e3e42; width: 200px; height: 150px; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; color: #666;">
+                            ROI Canvas
+                        </div>
+                        <div class="status-row">
+                            <span>ROI 平均灰度:</span>
+                            <span class="status-value">0.0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ROI设置面板 -->
+                <div class="panel">
+                    <h4>ROI 设置</h4>
+                    <div class="status-row">
+                        <span>配置状态:</span>
+                        <span class="status-value">未配置</span>
+                    </div>
+                    <div class="status-row">
+                        <span>x1 坐标:</span>
+                        <input type="number" value="0" min="0" style="width: 80px; background-color: #3c3c3c; border: 1px solid #3e3e42; color: #cccccc; padding: 2px 4px; border-radius: 3px;">
+                    </div>
+                    <div class="status-row">
+                        <span>y1 坐标:</span>
+                        <input type="number" value="0" min="0" style="width: 80px; background-color: #3c3c3c; border: 1px solid #3e3e42; color: #cccccc; padding: 2px 4px; border-radius: 3px;">
+                    </div>
+                    <div class="status-row">
+                        <span>x2 坐标:</span>
+                        <input type="number" value="200" min="0" style="width: 80px; background-color: #3c3c3c; border: 1px solid #3e3e42; color: #cccccc; padding: 2px 4px; border-radius: 3px;">
+                    </div>
+                    <div class="status-row">
+                        <span>y2 坐标:</span>
+                        <input type="number" value="150" min="0" style="width: 80px; background-color: #3c3c3c; border: 1px solid #3e3e42; color: #cccccc; padding: 2px 4px; border-radius: 3px;">
+                    </div>
+                    <button style="width: 100%; margin-top: 10px;">应用配置</button>
+                </div>
+
+                <!-- 波形截取面板 -->
+                <div class="panel">
+                    <h4>波形截取</h4>
+                    <div class="status-row">
+                        <span>窗口大小:</span>
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <input type="number" value="100" min="1" max="1000" style="width: 60px; background-color: #3c3c3c; border: 1px solid #3e3e42; color: #cccccc; padding: 2px 4px; border-radius: 3px;">
+                            <span style="font-size: 11px;">帧</span>
+                        </div>
+                    </div>
+                    <button style="width: 100%; margin: 10px 0;">截取波形</button>
+                    <div style="background-color: #0a0a0a; border: 1px solid #3e3e42; border-radius: 4px; padding: 5px; font-size: 11px; color: #666; text-align: center;">
+                        截取的波形将显示在这里
+                    </div>
+                </div>
+
+                <!-- 控制台面板 -->
+                <div class="panel">
+                    <h4>控制台</h4>
+                    <div class="status-row">
+                        <span>状态:</span>
+                        <span class="status-value" style="color: #007acc; font-weight: bold;">IDLE</span>
+                    </div>
+                    <div class="control-group">
+                        <button>开始检测</button>
+                        <button class="danger" disabled>停止</button>
+                        <button disabled>暂停</button>
+                        <button disabled>恢复</button>
+                    </div>
+                    <button style="width: 100%; margin-top: 5px;">刷新系统状态</button>
+                </div>
+            </div>
+
+            <div class="main-area">
+                <h3 style="margin-top: 0;">主图表区域</h3>
+                <div class="chart-container">
+                    实时波形图显示区域<br>
+                    <small style="color: #888;">(去除波峰检测后的简化界面)</small>
+                </div>
+
+                <div style="margin-top: 20px; padding: 15px; background-color: #2d2d30; border-radius: 4px;">
+                    <h4 style="margin-top: 0; color: #4ec9b0;">✅ 简化后的功能特点</h4>
+                    <ul style="margin: 10px 0; padding-left: 20px; line-height: 1.6;">
+                        <li><strong>保留功能</strong>: ROI监控、波形截取、系统控制</li>
+                        <li><strong>移除功能</strong>: 所有波峰检测相关的配置和逻辑</li>
+                        <li><strong>界面优化</strong>: 更简洁的侧边栏，减少复杂度</li>
+                        <li><strong>性能提升</strong>: 减少了不必要的API调用和状态更新</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

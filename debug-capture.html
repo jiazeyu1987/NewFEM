@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>调试波形截取功能</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1e1e1e;
+            color: #cccccc;
+            margin: 20px;
+        }
+        .debug-container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .debug-section {
+            border: 1px solid #3e3e42;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background-color: #252526;
+        }
+        .canvas-container {
+            border: 1px solid #3e3e42;
+            background-color: #1e1e1e;
+            border-radius: 4px;
+            margin: 10px 0;
+            padding: 10px;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #007acc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0062a3;
+        }
+        .debug-info {
+            background-color: #2d2d30;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success {
+            background-color: rgba(78, 201, 176, 0.1);
+            color: #4ec9b0;
+            border: 1px solid #4ec9b0;
+        }
+        .error {
+            background-color: rgba(244, 135, 113, 0.1);
+            color: #f48771;
+            border: 1px solid #f48771;
+        }
+    </style>
+</head>
+<body>
+    <div class="debug-container">
+        <div class="debug-section">
+            <h2>波形截取功能调试</h2>
+            <button id="test-data-btn">生成测试数据</button>
+            <button id="test-capture-btn">测试截取功能</button>
+            <button id="clear-btn">清除所有</button>
+            <div id="status" class="status">准备就绪</div>
+        </div>
+
+        <div class="debug-section">
+            <h3>测试数据源 (模拟原始数据)</h3>
+            <div class="canvas-container">
+                <canvas id="source-canvas" width="800" height="200"></canvas>
+            </div>
+        </div>
+
+        <div class="debug-section" id="captured-section" style="display: none;">
+            <h3>截取的波形</h3>
+            <div class="canvas-container">
+                <canvas id="captured-canvas" width="800" height="200"></canvas>
+            </div>
+            <div id="capture-info" class="debug-info"></div>
+        </div>
+
+        <div class="debug-section">
+            <h3>控制台输出</h3>
+            <div id="console-output" class="debug-info">等待操作...</div>
+        </div>
+    </div>
+
+    <script>
+        // 模拟 appState 和 capturedRenderer
+        let appState = {
+            chartData: [],
+            capture: {
+                windowSize: 100,
+                data: [],
+                isVisible: false,
+                timestamp: null,
+                actualFrameCount: 0
+            }
+        };
+
+        // 控制台输出重定向
+        const originalConsoleLog = console.log;
+        const originalConsoleError = console.error;
+        const originalConsoleWarn = console.warn;
+
+        function addConsoleOutput(type, ...args) {
+            const output = document.getElementById('console-output');
+            const timestamp = new Date().toLocaleTimeString();
+            const message = args.map(arg =>
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+            ).join(' ');
+
+            output.textContent += `[${timestamp}] ${type.toUpperCase()}: ${message}\n`;
+            output.scrollTop = output.scrollHeight;
+        }
+
+        console.log = function(...args) {
+            originalConsoleLog.apply(console, args);
+            addConsoleOutput('log', ...args);
+        };
+
+        console.error = function(...args) {
+            originalConsoleError.apply(console, args);
+            addConsoleOutput('error', ...args);
+        };
+
+        console.warn = function(...args) {
+            originalConsoleWarn.apply(console, args);
+            addConsoleOutput('warn', ...args);
+        };
+
+        // 简化的 CapturedWaveform 类 (复制固定实现)
+        class CapturedWaveform {
+            constructor(canvasId) {
+                this.canvas = document.getElementById(canvasId);
+
+                if (!this.canvas) {
+                    console.error(`CapturedWaveform: Canvas element with id '${canvasId}' not found`);
+                    return;
+                }
+
+                this.ctx = this.canvas.getContext('2d', { alpha: false });
+                if (!this.ctx) {
+                    console.error('CapturedWaveform: Failed to get 2D context');
+                    return;
+                }
+
+                console.log('CapturedWaveform: Canvas initialized successfully');
+
+                this.resize();
+
+                this.config = {
+                    showGrid: true,
+                    showBaseline: true,
+                    showPoints: true,
+                    zoom: 1.0
+                };
+            }
+
+            resize() {
+                const rect = this.canvas.getBoundingClientRect();
+                const dpr = window.devicePixelRatio || 1;
+
+                this.canvas.width = rect.width * dpr;
+                this.canvas.height = 200 * dpr;
+                this.ctx.scale(dpr, dpr);
+                this.canvas.style.width = `${rect.width}px`;
+                this.canvas.style.height = '200px';
+
+                this.width = rect.width;
+                this.height = 200;
+
+                if (appState && appState.capture && appState.capture.data && appState.capture.data.length > 0) {
+                    this.draw(appState.capture.data);
+                }
+            }
+
+            draw(data) {
+                console.log('CapturedWaveform.draw() called with data:', data ? `${data.length} points` : 'null');
+
+                if (!this.ctx) {
+                    console.error('CapturedWaveform: Canvas context not available');
+                    return;
+                }
+
+                if (!data) {
+                    console.warn('CapturedWaveform: No data provided');
+                    this.drawPlaceholder("无数据");
+                    return;
+                }
+
+                if (!Array.isArray(data) || data.length === 0) {
+                    console.warn('CapturedWaveform: Data is not an array or is empty');
+                    this.drawPlaceholder("无数据");
+                    return;
+                }
+
+                const hasValidData = data.every(pt => pt && typeof pt.value === 'number');
+                if (!hasValidData) {
+                    console.error('CapturedWaveform: Invalid data structure');
+                    this.drawPlaceholder("数据格式错误");
+                    return;
+                }
+
+                console.log(`CapturedWaveform: Drawing ${data.length} data points`);
+
+                this.ctx.fillStyle = '#0a0a0a';
+                this.ctx.fillRect(0, 0, this.width, this.height);
+
+                const midY = this.height / 2;
+                const scaleY = (this.height / 255) * this.config.zoom;
+                const mapY = (val) => midY - (val - 128) * scaleY;
+
+                if (this.config.showGrid) {
+                    this.ctx.strokeStyle = '#333';
+                    this.ctx.lineWidth = 1;
+                    this.ctx.beginPath();
+                    for (let v = 0; v <= 255; v += 50) {
+                        const y = mapY(v);
+                        this.ctx.moveTo(0, y);
+                        this.ctx.lineTo(this.width, y);
+                    }
+                    const step = this.width / 10;
+                    for (let x = 0; x < this.width; x += step) {
+                        this.ctx.moveTo(x, 0);
+                        this.ctx.lineTo(x, this.height);
+                    }
+                    this.ctx.stroke();
+                }
+
+                const stepX = this.width / (data.length - 1);
+
+                const baselineY = mapY(120);
+                this.ctx.strokeStyle = '#dcdcaa';
+                this.ctx.setLineDash([5, 5]);
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, baselineY);
+                this.ctx.lineTo(this.width, baselineY);
+                this.ctx.stroke();
+                this.ctx.setLineDash([]);
+
+                this.ctx.strokeStyle = '#4ec9b0';
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+
+                data.forEach((pt, i) => {
+                    const x = i * stepX;
+                    const y = mapY(pt.value);
+                    if (i === 0) {
+                        this.ctx.moveTo(x, y);
+                    } else {
+                        this.ctx.lineTo(x, y);
+                    }
+                });
+                this.ctx.stroke();
+
+                if (this.config.showPoints) {
+                    this.ctx.fillStyle = '#fff';
+                    data.forEach((pt, i) => {
+                        const x = i * stepX;
+                        const y = mapY(pt.value);
+                        this.ctx.beginPath();
+                        this.ctx.arc(x, y, 2, 0, Math.PI * 2);
+                        this.ctx.fill();
+                    });
+                }
+
+                console.log('✅ CapturedWaveform: Drawing completed');
+            }
+
+            drawPlaceholder(message) {
+                this.ctx.fillStyle = '#0a0a0a';
+                this.ctx.fillRect(0, 0, this.width, this.height);
+
+                this.ctx.fillStyle = '#666';
+                this.ctx.font = '12px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText(message, this.width / 2, this.height / 2);
+            }
+        }
+
+        // 绘制源数据
+        function drawSourceData() {
+            const canvas = document.getElementById('source-canvas');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+
+            ctx.fillStyle = '#1e1e1e';
+            ctx.fillRect(0, 0, width, height);
+
+            if (appState.chartData.length === 0) return;
+
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let i = 0; i <= 10; i++) {
+                const y = (height / 10) * i;
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+            }
+            ctx.stroke();
+
+            ctx.strokeStyle = '#4ec9b0';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+
+            const stepX = width / 200;
+            appState.chartData.slice(-200).forEach((pt, i) => {
+                const x = i * stepX;
+                const y = height - (pt.value / 255) * height;
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+            ctx.stroke();
+        }
+
+        // 生成测试数据
+        function generateTestData() {
+            console.log('生成测试数据...');
+
+            appState.chartData = [];
+            for (let i = 0; i < 150; i++) {
+                const t = i * 0.1;
+                let value = 120 + Math.sin(t) * 15 + (Math.random() - 0.5) * 8;
+
+                if (i > 50 && i < 80) {
+                    value += 30; // 模拟波峰
+                }
+
+                appState.chartData.push({ t, value });
+            }
+
+            drawSourceData();
+            updateStatus('success', `✅ 生成了 ${appState.chartData.length} 个测试数据点`);
+        }
+
+        // 测试截取功能
+        function testCapture() {
+            console.log('测试截取功能...');
+
+            if (appState.chartData.length === 0) {
+                updateStatus('error', '❌ 请先生成测试数据');
+                return;
+            }
+
+            const windowSize = 50;
+            const chartData = appState.chartData;
+            const actualFrameCount = Math.min(windowSize, chartData.length);
+            const startIndex = chartData.length - actualFrameCount;
+
+            const capturedData = chartData.slice(startIndex).map(pt => ({
+                ...pt,
+                value: pt.value,
+                t: pt.t - chartData[startIndex].t
+            }));
+
+            appState.capture = {
+                windowSize: windowSize,
+                data: capturedData,
+                isVisible: true,
+                timestamp: new Date(),
+                actualFrameCount: actualFrameCount
+            };
+
+            console.log('截取数据:', appState.capture);
+
+            document.getElementById('captured-section').style.display = 'block';
+
+            if (!window.capturedRenderer) {
+                window.capturedRenderer = new CapturedWaveform('captured-canvas');
+            }
+
+            setTimeout(() => {
+                window.capturedRenderer.resize();
+                window.capturedRenderer.draw(appState.capture.data);
+            }, 100);
+
+            document.getElementById('capture-info').textContent = JSON.stringify({
+                windowSize: appState.capture.windowSize,
+                dataLength: appState.capture.data.length,
+                actualFrameCount: appState.capture.actualFrameCount,
+                timestamp: appState.capture.timestamp.toISOString(),
+                sampleData: appState.capture.data.slice(0, 3)
+            }, null, 2);
+
+            updateStatus('success', `✅ 成功截取 ${actualFrameCount} 帧数据`);
+        }
+
+        function clearAll() {
+            appState.chartData = [];
+            appState.capture = {
+                windowSize: 100,
+                data: [],
+                isVisible: false,
+                timestamp: null,
+                actualFrameCount: 0
+            };
+
+            document.getElementById('captured-section').style.display = 'none';
+            document.getElementById('console-output').textContent = '等待操作...';
+
+            drawSourceData();
+            updateStatus('', '已清除所有数据');
+        }
+
+        function updateStatus(type, message) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = 'status ' + type;
+        }
+
+        // 事件绑定
+        document.getElementById('test-data-btn').addEventListener('click', generateTestData);
+        document.getElementById('test-capture-btn').addEventListener('click', testCapture);
+        document.getElementById('clear-btn').addEventListener('click', clearAll);
+
+        // 初始化
+        drawSourceData();
+        console.log('调试页面已初始化');
+    </script>
+</body>
+</html>

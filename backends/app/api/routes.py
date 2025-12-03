@@ -38,13 +38,17 @@ from ..models import (
     RoiConfigResponse,
     RoiData,
     RoiFrameRateResponse,
+    RoiTimeSeriesPoint,
+    RoiWindowCaptureResponse,
     StatusResponse,
     SystemStatus,
     TimeSeriesPoint,
+    WindowCaptureResponse,
 )
 from ..core.data_store import data_store
 from ..core.processor import processor
 from ..core.roi_capture import roi_capture_service
+from ..utils import create_roi_data_with_image
 
 
 router = APIRouter()
@@ -768,6 +772,136 @@ async def set_peak_detection_config(
         min_region_length=settings.peak_min_region_length,
         success=True,
         message=f"Peak detection configuration updated: {fields_str}"
+    )
+
+
+# 窗口截取端点
+@router.get("/data/window-capture", response_model=WindowCaptureResponse)
+async def window_capture(
+    count: int = Query(100, ge=50, le=200, description="窗口大小：50-200帧")
+) -> WindowCaptureResponse:
+    """截取指定帧数的历史数据窗口"""
+    logger.info("🖼️ Window capture requested: count=%d", count)
+
+    # 从数据存储中获取指定数量的历史帧
+    frames = data_store.get_series(count)
+    if not frames:
+        logger.warning("Window capture failed: no data available")
+        raise HTTPException(status_code=404, detail="No data available for capture")
+
+    # 获取当前状态信息
+    _, current_frame_count, _, _, _, baseline = data_store.get_status_snapshot()
+
+    # 计算帧范围
+    start_frame = max(0, current_frame_count - len(frames))
+    end_frame = current_frame_count - 1
+
+    # 转换为TimeSeriesPoint格式
+    series = []
+    for frame in frames:
+        series.append(TimeSeriesPoint(
+            t=(frame.timestamp - frames[0].timestamp).total_seconds(),
+            value=frame.value
+        ))
+
+    # 构建元数据
+    capture_metadata = {
+        "start_frame": start_frame,
+        "end_frame": end_frame,
+        "actual_frame_count": len(frames),
+        "baseline": baseline,
+        "capture_duration": (frames[-1].timestamp - frames[0].timestamp).total_seconds() if len(frames) > 1 else 0.0,
+        "current_frame_count": current_frame_count
+    }
+
+    logger.info("✅ Window capture successful: frames=%d, range=(%d,%d), duration=%.3fs",
+               len(series), start_frame, end_frame, capture_metadata["capture_duration"])
+
+    return WindowCaptureResponse(
+        timestamp=datetime.utcnow(),
+        window_size=count,
+        frame_range=(start_frame, end_frame),
+        series=series,
+        capture_metadata=capture_metadata
+    )
+
+
+# ROI窗口截取端点
+@router.get("/data/roi-window-capture", response_model=RoiWindowCaptureResponse)
+async def roi_window_capture(
+    count: int = Query(100, ge=50, le=500, description="ROI窗口大小：50-500帧")
+) -> RoiWindowCaptureResponse:
+    """截取指定帧数的ROI灰度分析历史数据窗口"""
+    logger.info("🖼️ ROI window capture requested: count=%d", count)
+
+    # 从数据存储中获取指定数量的ROI历史帧
+    roi_frames = data_store.get_roi_series(count)
+    if not roi_frames:
+        logger.warning("ROI window capture failed: no ROI data available")
+        raise HTTPException(status_code=404, detail="No ROI data available for capture")
+
+    # 获取当前状态信息
+    _, current_main_frame_count, _, _, _, _ = data_store.get_status_snapshot()
+    roi_count, roi_buffer_size, last_gray_value, last_main_frame_count = data_store.get_roi_status_snapshot()
+
+    # 计算帧范围
+    roi_start_frame = max(0, roi_count - len(roi_frames))
+    roi_end_frame = roi_count - 1
+
+    # 转换为RoiTimeSeriesPoint格式
+    series = []
+    for roi_frame in roi_frames:
+        series.append(RoiTimeSeriesPoint(
+            t=(roi_frame.timestamp - roi_frames[0].timestamp).total_seconds(),
+            gray_value=roi_frame.gray_value,
+            roi_index=roi_frame.index
+        ))
+
+    # 构建ROI配置信息
+    roi_config = roi_frames[0].roi_config
+    roi_config_dict = {
+        "x1": roi_config.x1,
+        "y1": roi_config.y1,
+        "x2": roi_config.x2,
+        "y2": roi_config.y2,
+        "width": roi_config.width,
+        "height": roi_config.height,
+        "center_x": roi_config.center_x,
+        "center_y": roi_config.center_y
+    }
+
+    # 构建元数据
+    capture_metadata = {
+        "roi_start_frame": roi_start_frame,
+        "roi_end_frame": roi_end_frame,
+        "actual_roi_frame_count": len(roi_frames),
+        "main_frame_start": roi_frames[0].frame_count if roi_frames else 0,
+        "main_frame_end": roi_frames[-1].frame_count if roi_frames else 0,
+        "capture_duration": (roi_frames[-1].timestamp - roi_frames[0].timestamp).total_seconds() if len(roi_frames) > 1 else 0.0,
+        "current_roi_frame_count": roi_count,
+        "current_main_frame_count": current_main_frame_count,
+        "roi_buffer_size": roi_buffer_size,
+        "last_gray_value": last_gray_value
+    }
+
+    # 获取ROI帧率信息
+    actual_fps, available_frames = data_store.get_roi_frame_rate_info()
+    capture_metadata["actual_roi_fps"] = actual_fps
+    capture_metadata["available_roi_frames"] = available_frames
+
+    logger.info("✅ ROI window capture successful: frames=%d, roi_range=(%d,%d), main_range=(%d,%d), duration=%.3fs",
+               len(series), roi_start_frame, roi_end_frame,
+               capture_metadata["main_frame_start"], capture_metadata["main_frame_end"],
+               capture_metadata["capture_duration"])
+
+    return RoiWindowCaptureResponse(
+        timestamp=datetime.utcnow(),
+        window_size=count,
+        roi_frame_range=(roi_start_frame, roi_end_frame),
+        main_frame_range=(capture_metadata["main_frame_start"], capture_metadata["main_frame_end"]),
+        series=series,
+        roi_config=roi_config_dict,
+        capture_metadata=capture_metadata
     )
 
 

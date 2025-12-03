@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, Field
 
@@ -215,6 +215,39 @@ class EnhancedPeakSignal(BaseModel):
     threshold: float
     in_peak_region: bool
     frame_count: int
+
+
+class WindowCaptureResponse(BaseModel):
+    """窗口截取响应模型"""
+    type: str = "window_capture"
+    timestamp: datetime
+    window_size: int
+    frame_range: Tuple[int, int]
+    series: List[TimeSeriesPoint]
+    capture_metadata: Dict[str, Any] = Field(default_factory=dict)
+    success: bool = True
+    message: str = "Window data captured successfully"
+
+
+class RoiTimeSeriesPoint(BaseModel):
+    """ROI时间序列数据点"""
+    t: float
+    gray_value: float
+    roi_index: int
+
+
+class RoiWindowCaptureResponse(BaseModel):
+    """ROI窗口截取响应模型"""
+    type: str = "roi_window_capture"
+    timestamp: datetime
+    window_size: int
+    roi_frame_range: Tuple[int, int]
+    main_frame_range: Tuple[int, int]
+    series: List[RoiTimeSeriesPoint]
+    roi_config: Dict[str, Any]
+    capture_metadata: Dict[str, Any] = Field(default_factory=dict)
+    success: bool = True
+    message: str = "ROI window data captured successfully"
 
 
 class AnalyzeResponse(BaseModel):

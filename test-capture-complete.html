@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>完整波形截取功能测试</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1e1e1e;
+            color: #cccccc;
+            margin: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            background-color: #252526;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #3e3e42;
+        }
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .panel {
+            background-color: #252526;
+            border: 1px solid #3e3e42;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .panel h3 {
+            margin-top: 0;
+            color: #ffffff;
+            border-bottom: 1px solid #3e3e42;
+            padding-bottom: 10px;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #007acc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        button:hover {
+            background-color: #0062a3;
+        }
+        button:disabled {
+            background-color: #3a3a3a;
+            cursor: not-allowed;
+        }
+        .input-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .input-group label {
+            min-width: 100px;
+        }
+        .input-group input {
+            background-color: #3c3c3c;
+            border: 1px solid #3e3e42;
+            color: #cccccc;
+            padding: 4px 8px;
+            border-radius: 4px;
+            width: 100px;
+        }
+        .canvas-container {
+            border: 1px solid #3e3e42;
+            background-color: #1e1e1e;
+            border-radius: 4px;
+            margin: 10px 0;
+            padding: 10px;
+            min-height: 200px;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            border-radius: 4px;
+        }
+        .status-bar {
+            background-color: #2d2d30;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+        .success {
+            color: #4ec9b0;
+        }
+        .error {
+            color: #f48771;
+        }
+        .warning {
+            color: #dcdcaa;
+        }
+        .capture-section {
+            grid-column: 1 / -1;
+        }
+        .debug-output {
+            background-color: #2d2d30;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            padding: 15px;
+            font-family: monospace;
+            font-size: 11px;
+            max-height: 150px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin-top: 10px;
+        }
+        .feature-list {
+            background-color: #2d2d30;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        .feature-list h4 {
+            margin-top: 0;
+            color: #4ec9b0;
+        }
+        .feature-list ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .feature-list li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 NewFEM 波形截取功能完整测试</h1>
+            <div class="feature-list">
+                <h4>✅ 已修复的问题</h4>
+                <ul>
+                    <li>Canvas resize 后自动重绘</li>
+                    <li>Canvas 上下文验证和错误处理</li>
+                    <li>数据结构验证和调试日志</li>
+                    <li>显示流程时序问题（DOM 更新后渲染）</li>
+                    <li>后端错误修复（create_roi_data_with_image）</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <!-- 模拟主图表 -->
+            <div class="panel">
+                <h3>📊 主波形图（模拟实时数据）</h3>
+                <div class="controls">
+                    <button id="start-simulation">开始模拟</button>
+                    <button id="stop-simulation">停止模拟</button>
+                    <button id="clear-data">清空数据</button>
+                </div>
+                <div class="canvas-container">
+                    <canvas id="main-chart" width="400" height="200"></canvas>
+                </div>
+                <div class="status-bar" id="main-status">
+                    状态: 待机 | 数据点: 0 | FPS: 0
+                </div>
+            </div>
+
+            <!-- 截取控制面板 -->
+            <div class="panel">
+                <h3>🎛️ 截取控制面板</h3>
+                <div class="input-group">
+                    <label>窗口大小:</label>
+                    <input type="number" id="window-size" value="50" min="1" max="200">
+                    <span>帧</span>
+                </div>
+                <div class="controls">
+                    <button id="capture-btn">截取波形</button>
+                    <button id="clear-capture-btn">清除截取</button>
+                </div>
+                <div class="status-bar" id="capture-status">
+                    等待截取...
+                </div>
+                <div class="debug-output" id="debug-output">
+                    等待操作...
+                </div>
+            </div>
+
+            <!-- 截取结果显示 -->
+            <div class="panel capture-section">
+                <h3>📸 截取的波形（静态显示）</h3>
+                <div id="captured-section" style="display: none;">
+                    <div class="status-bar success" id="capture-info">
+                        截取信息: -
+                    </div>
+                    <div class="canvas-container">
+                        <canvas id="captured-chart" width="800" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 测试状态管理
+        const testState = {
+            mainData: [],
+            capturedData: null,
+            isSimulating: false,
+            frameCount: 0,
+            animationId: null
+        };
+
+        // 重定向控制台输出到页面
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalWarn = console.warn;
+
+        function logToPage(...args) {
+            const output = document.getElementById('debug-output');
+            const timestamp = new Date().toLocaleTimeString();
+            const message = args.map(arg =>
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+            ).join(' ');
+            output.textContent += `[${timestamp}] ${message}\n`;
+            output.scrollTop = output.scrollHeight;
+        }
+
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            logToPage('ℹ️', ...args);
+        };
+
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            logToPage('❌', ...args);
+        };
+
+        console.warn = function(...args) {
+            originalWarn.apply(console, args);
+            logToPage('⚠️', ...args);
+        };
+
+        // CapturedWaveform 类（与修复后的实现一致）
+        class CapturedWaveform {
+            constructor(canvasId) {
+                console.log(`CapturedWaveform: 初始化画布 ${canvasId}`);
+
+                this.canvas = document.getElementById(canvasId);
+
+                if (!this.canvas) {
+                    console.error(`CapturedWaveform: Canvas element with id '${canvasId}' not found`);
+                    return;
+                }
+
+                this.ctx = this.canvas.getContext('2d', { alpha: false });
+                if (!this.ctx) {
+                    console.error('CapturedWaveform: Failed to get 2D context');
+                    return;
+                }
+
+                console.log('✅ CapturedWaveform: Canvas initialized successfully');
+
+                this.resize();
+
+                this.config = {
+                    showGrid: true,
+                    showBaseline: true,
+                    showPoints: true,
+                    zoom: 1.0
+                };
+            }
+
+            resize() {
+                const rect = this.canvas.getBoundingClientRect();
+                const dpr = window.devicePixelRatio || 1;
+
+                this.canvas.width = rect.width * dpr;
+                this.canvas.height = 200 * dpr;
+                this.ctx.scale(dpr, dpr);
+                this.canvas.style.width = `${rect.width}px`;
+                this.canvas.style.height = '200px';
+
+                this.width = rect.width;
+                this.height = 200;
+
+                // 如果有捕获的数据，重新绘制
+                if (testState.capturedData && testState.capturedData.length > 0) {
+                    this.draw(testState.capturedData);
+                }
+            }
+
+            draw(data) {
+                console.log('🎨 CapturedWaveform.draw() called with data:', data ? `${data.length} points` : 'null');
+
+                if (!this.ctx) {
+                    console.error('❌ CapturedWaveform: Canvas context not available');
+                    return;
+                }
+
+                if (!data) {
+                    console.warn('⚠️ CapturedWaveform: No data provided');
+                    this.drawPlaceholder("无数据");
+                    return;
+                }
+
+                if (!Array.isArray(data) || data.length === 0) {
+                    console.warn('⚠️ CapturedWaveform: Data is not an array or is empty');
+                    this.drawPlaceholder("无数据");
+                    return;
+                }
+
+                const hasValidData = data.every(pt => pt && typeof pt.value === 'number');
+                if (!hasValidData) {
+                    console.error('❌ CapturedWaveform: Invalid data structure');
+                    this.drawPlaceholder("数据格式错误");
+                    return;
+                }
+
+                console.log(`✨ CapturedWaveform: Drawing ${data.length} data points`);
+
+                // 清空背景
+                this.ctx.fillStyle = '#0a0a0a';
+                this.ctx.fillRect(0, 0, this.width, this.height);
+
+                // Y轴映射函数
+                const midY = this.height / 2;
+                const scaleY = (this.height / 255) * this.config.zoom;
+                const mapY = (val) => midY - (val - 128) * scaleY;
+
+                // 绘制网格
+                if (this.config.showGrid) {
+                    this.ctx.strokeStyle = '#333';
+                    this.ctx.lineWidth = 1;
+                    this.ctx.beginPath();
+
+                    for (let v = 0; v <= 255; v += 50) {
+                        const y = mapY(v);
+                        this.ctx.moveTo(0, y);
+                        this.ctx.lineTo(this.width, y);
+                    }
+
+                    const step = this.width / 10;
+                    for (let x = 0; x < this.width; x += step) {
+                        this.ctx.moveTo(x, 0);
+                        this.ctx.lineTo(x, this.height);
+                    }
+                    this.ctx.stroke();
+                }
+
+                const stepX = this.width / (data.length - 1);
+
+                // 绘制基线
+                const baselineY = mapY(120);
+                this.ctx.strokeStyle = '#dcdcaa';
+                this.ctx.setLineDash([5, 5]);
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, baselineY);
+                this.ctx.lineTo(this.width, baselineY);
+                this.ctx.stroke();
+                this.ctx.setLineDash([]);
+
+                // 绘制波形
+                this.ctx.strokeStyle = '#4ec9b0';
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+
+                data.forEach((pt, i) => {
+                    const x = i * stepX;
+                    const y = mapY(pt.value);
+                    if (i === 0) {
+                        this.ctx.moveTo(x, y);
+                    } else {
+                        this.ctx.lineTo(x, y);
+                    }
+                });
+                this.ctx.stroke();
+
+                // 绘制数据点
+                if (this.config.showPoints) {
+                    this.ctx.fillStyle = '#fff';
+                    data.forEach((pt, i) => {
+                        const x = i * stepX;
+                        const y = mapY(pt.value);
+                        this.ctx.beginPath();
+                        this.ctx.arc(x, y, 2, 0, Math.PI * 2);
+                        this.ctx.fill();
+                    });
+                }
+
+                console.log('✅ CapturedWaveform: Drawing completed successfully');
+            }
+
+            drawPlaceholder(message) {
+                this.ctx.fillStyle = '#0a0a0a';
+                this.ctx.fillRect(0, 0, this.width, this.height);
+
+                this.ctx.fillStyle = '#666';
+                this.ctx.font = '12px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText(message, this.width / 2, this.height / 2);
+            }
+        }
+
+        // 主图表绘制
+        function drawMainChart() {
+            const canvas = document.getElementById('main-chart');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+
+            ctx.fillStyle = '#1e1e1e';
+            ctx.fillRect(0, 0, width, height);
+
+            if (testState.mainData.length === 0) return;
+
+            // 绘制网格
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let i = 0; i <= 10; i++) {
+                const y = (height / 10) * i;
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+            }
+            for (let i = 0; i <= 20; i++) {
+                const x = (width / 20) * i;
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height);
+            }
+            ctx.stroke();
+
+            // 绘制基线
+            const baselineY = height - (120 / 255) * height;
+            ctx.strokeStyle = '#dcdcaa';
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(0, baselineY);
+            ctx.lineTo(width, baselineY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 绘制波形
+            ctx.strokeStyle = '#4ec9b0';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+
+            const maxPoints = 100;
+            const stepX = width / (maxPoints - 1);
+
+            testState.mainData.slice(-maxPoints).forEach((pt, i) => {
+                const x = i * stepX;
+                const y = height - (pt.value / 255) * height;
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+            ctx.stroke();
+
+            // 更新状态
+            document.getElementById('main-status').innerHTML =
+                `状态: <span class="success">运行中</span> | 数据点: ${testState.mainData.length} | 帧数: ${testState.frameCount}`;
+        }
+
+        // 模拟数据生成
+        function generateSimulationData() {
+            if (!testState.isSimulating) return;
+
+            testState.frameCount++;
+            const t = testState.frameCount * 0.05;
+            let value = 120 + Math.sin(t) * 10 + (Math.random() - 0.5) * 5;
+
+            // 偶尔生成波峰
+            if (Math.random() > 0.95) {
+                value += 40;
+            }
+
+            testState.mainData.push({ t, value });
+
+            // 保持固定长度
+            if (testState.mainData.length > 200) {
+                testState.mainData.shift();
+            }
+
+            drawMainChart();
+            testState.animationId = requestAnimationFrame(generateSimulationData);
+        }
+
+        // 截取功能
+        function captureWaveform() {
+            console.log('🎯 captureWaveform() called');
+
+            try {
+                const windowSize = parseInt(document.getElementById('window-size').value) || 50;
+                const mainData = testState.mainData;
+
+                console.log('📊 Capture settings:', {
+                    windowSize,
+                    availableData: mainData.length,
+                    testStateExists: !!testState
+                });
+
+                if (mainData.length === 0) {
+                    alert('❌ 没有可截取的数据！请先开始数据模拟。');
+                    return;
+                }
+
+                const actualFrameCount = Math.min(windowSize, mainData.length);
+                const startIndex = mainData.length - actualFrameCount;
+
+                console.log('📐 Data range calculation:', {
+                    actualFrameCount,
+                    startIndex,
+                    totalFrames: mainData.length
+                });
+
+                // 深拷贝数据
+                const capturedData = mainData.slice(startIndex).map(pt => ({
+                    ...pt,
+                    value: pt.value,
+                    t: pt.t - mainData[startIndex].t
+                }));
+
+                console.log('📋 Captured data sample:', capturedData.slice(0, 3));
+
+                testState.capturedData = capturedData;
+
+                console.log('💾 Updated testState:', {
+                    dataLength: testState.capturedData.length,
+                    actualFrameCount
+                });
+
+                updateCaptureDisplay();
+
+                console.log(`✅ Successfully captured ${actualFrameCount} frames from ${mainData.length} available frames`);
+            } catch (error) {
+                console.error('❌ Capture waveform error:', error);
+                alert('波形截取失败: ' + error.message);
+            }
+        }
+
+        // 更新截取显示
+        function updateCaptureDisplay() {
+            console.log('🔄 updateCaptureDisplay() called, capture state:', {
+                dataLength: testState.capturedData ? testState.capturedData.length : 0,
+                rendererExists: !!window.capturedRenderer
+            });
+
+            if (testState.capturedData && testState.capturedData.length > 0) {
+                if (!window.capturedRenderer) {
+                    console.error('❌ updateCaptureDisplay: capturedRenderer not initialized');
+                    return;
+                }
+
+                const timestamp = new Date().toLocaleTimeString();
+                document.getElementById('capture-info').innerHTML =
+                    `✅ 截取成功: ${testState.capturedData.length} 帧 @ ${timestamp}`;
+
+                const capturedSection = document.getElementById('captured-section');
+                capturedSection.style.display = 'block';
+
+                // 等待DOM更新
+                setTimeout(() => {
+                    try {
+                        console.log('🎨 About to resize and render captured waveform');
+
+                        if (!window.capturedRenderer) {
+                            window.capturedRenderer = new CapturedWaveform('captured-chart');
+                        }
+
+                        window.capturedRenderer.resize();
+                        window.capturedRenderer.draw(testState.capturedData);
+
+                        console.log('✅ updateCaptureDisplay: Waveform rendered successfully');
+
+                        document.getElementById('capture-status').innerHTML =
+                            `<span class="success">✅ 截取成功: ${testState.capturedData.length} 帧</span>`;
+                    } catch (error) {
+                        console.error('❌ updateCaptureDisplay: Error rendering waveform:', error);
+                        document.getElementById('capture-status').innerHTML =
+                            `<span class="error">❌ 渲染错误: ${error.message}</span>`;
+                    }
+                }, 100);
+            } else {
+                document.getElementById('captured-section').style.display = 'none';
+                document.getElementById('capture-status').innerHTML = '等待截取...';
+                console.log('updateCaptureDisplay: Hide captured display (no data)');
+            }
+        }
+
+        // 清除截取
+        function clearCapture() {
+            console.log('🗑️ clearCapture() called');
+
+            testState.capturedData = null;
+            document.getElementById('captured-section').style.display = 'none';
+            document.getElementById('capture-status').innerHTML = '截取已清除';
+
+            if (window.capturedRenderer) {
+                window.capturedRenderer.draw(null);
+            }
+
+            console.log('✅ Capture cleared');
+        }
+
+        // 控制函数
+        function startSimulation() {
+            if (testState.isSimulating) return;
+            testState.isSimulating = true;
+            generateSimulationData();
+            document.getElementById('main-status').innerHTML =
+                `状态: <span class="success">模拟中</span> | 数据点: 0 | 帧数: 0`;
+        }
+
+        function stopSimulation() {
+            testState.isSimulating = false;
+            if (testState.animationId) {
+                cancelAnimationFrame(testState.animationId);
+            }
+            document.getElementById('main-status').innerHTML =
+                `状态: <span class="warning">已停止</span> | 数据点: ${testState.mainData.length} | 帧数: ${testState.frameCount}`;
+        }
+
+        function clearAllData() {
+            testState.mainData = [];
+            testState.frameCount = 0;
+            drawMainChart();
+            clearCapture();
+            document.getElementById('main-status').innerHTML =
+                '状态: 待机 | 数据点: 0 | 帧数: 0';
+        }
+
+        // 事件绑定
+        document.getElementById('start-simulation').addEventListener('click', startSimulation);
+        document.getElementById('stop-simulation').addEventListener('click', stopSimulation);
+        document.getElementById('clear-data').addEventListener('click', clearAllData);
+        document.getElementById('capture-btn').addEventListener('click', captureWaveform);
+        document.getElementById('clear-capture-btn').addEventListener('click', clearCapture);
+
+        // 初始化
+        drawMainChart();
+        console.log('🚀 波形截取功能完整测试页面已初始化');
+        console.log('📝 已修复的问题包括:');
+        console.log('   - Canvas resize 自动重绘');
+        console.log('   - Canvas 上下文验证');
+        console.log('   - 数据结构验证');
+        console.log('   - DOM 更新时序');
+        console.log('   - 详细的调试日志');
+
+        // 自动开始模拟数据
+        setTimeout(() => {
+            startSimulation();
+        }, 1000);
+    </script>
+</body>
+</html>

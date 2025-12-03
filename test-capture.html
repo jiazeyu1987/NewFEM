@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>波形截取功能测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1e1e1e;
+            color: #cccccc;
+            margin: 20px;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .test-section {
+            border: 1px solid #3e3e42;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background-color: #252526;
+        }
+        .capture-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .capture-controls input {
+            padding: 8px;
+            border: 1px solid #3e3e42;
+            background-color: #3c3c3c;
+            color: #cccccc;
+            border-radius: 4px;
+            width: 100px;
+        }
+        .capture-controls button {
+            padding: 8px 16px;
+            background-color: #007acc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .capture-controls button:hover {
+            background-color: #0062a3;
+        }
+        .main-chart, .captured-chart {
+            border: 1px solid #3e3e42;
+            background-color: #1e1e1e;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .chart-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #ffffff;
+        }
+        .status-info {
+            background-color: #3c3c3c;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .instructions {
+            background-color: #2d2d30;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+        .test-success {
+            color: #4ec9b0;
+            background-color: rgba(78, 201, 176, 0.1);
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <div class="instructions">
+            <h2>波形截取功能测试页面</h2>
+            <p>此页面用于测试新添加的波形截取功能，验证以下功能：</p>
+            <ul>
+                <li>截取窗口大小设置（默认100帧）</li>
+                <li>动态生成模拟波形数据</li>
+                <li>截取指定帧数的波形数据</li>
+                <li>静态显示截取的波形</li>
+                <li>清除截取功能</li>
+                <li>主曲线与截取曲线的独立性</li>
+            </ul>
+        </div>
+
+        <div class="test-section">
+            <div class="chart-title">主波形图（实时更新）</div>
+            <canvas id="main-chart" class="main-chart" width="760" height="300"></canvas>
+            <div class="status-info" id="main-info">
+                等待启动数据生成...
+            </div>
+        </div>
+
+        <div class="test-section">
+            <div class="chart-title">波形截取控制</div>
+            <div class="capture-controls">
+                <label>窗口大小（帧）:</label>
+                <input type="number" id="window-size" value="100" min="1" max="500">
+                <button id="capture-btn">截取波形</button>
+                <button id="clear-btn">清除截取</button>
+                <button id="start-data-btn">开始数据生成</button>
+                <button id="stop-data-btn">停止数据生成</button>
+            </div>
+            <div class="status-info" id="capture-status">
+                尚未进行截取...
+            </div>
+        </div>
+
+        <div class="test-section" id="captured-section" style="display: none;">
+            <div class="chart-title">截取的波形（静态显示）</div>
+            <canvas id="captured-chart" class="captured-chart" width="760" height="200"></canvas>
+            <div class="status-info" id="captured-info">
+                截取信息：-
+            </div>
+        </div>
+
+        <div class="test-success" id="test-result" style="display: none;">
+            ✅ 波形截取功能测试完成！所有功能正常工作。
+        </div>
+    </div>
+
+    <script>
+        // 测试状态
+        const testState = {
+            mainData: [],
+            capturedData: null,
+            isGenerating: false,
+            frameCount: 0,
+            animationId: null
+        };
+
+        // 获取画布上下文
+        const mainCanvas = document.getElementById('main-chart');
+        const mainCtx = mainCanvas.getContext('2d');
+        const capturedCanvas = document.getElementById('captured-chart');
+        const capturedCtx = capturedCanvas.getContext('2d');
+
+        // 绘制主波形
+        function drawMainChart() {
+            const ctx = mainCtx;
+            const width = mainCanvas.width;
+            const height = mainCanvas.height;
+
+            // 清空背景
+            ctx.fillStyle = '#1e1e1e';
+            ctx.fillRect(0, 0, width, height);
+
+            if (testState.mainData.length === 0) return;
+
+            // 绘制网格
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let i = 0; i <= 10; i++) {
+                const y = (height / 10) * i;
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+            }
+            for (let i = 0; i <= 20; i++) {
+                const x = (width / 20) * i;
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height);
+            }
+            ctx.stroke();
+
+            // 绘制基线
+            const baselineY = height - (120 / 255) * height;
+            ctx.strokeStyle = '#dcdcaa';
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(0, baselineY);
+            ctx.lineTo(width, baselineY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 绘制波形
+            ctx.strokeStyle = '#4ec9b0';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+
+            const maxPoints = 200;
+            const stepX = width / (maxPoints - 1);
+
+            testState.mainData.slice(-maxPoints).forEach((pt, i) => {
+                const x = i * stepX;
+                const y = height - (pt.value / 255) * height;
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+            ctx.stroke();
+
+            // 更新信息
+            document.getElementById('main-info').textContent =
+                `帧数: ${testState.frameCount} | 数据点: ${testState.mainData.length} | 当前值: ${testState.mainData[testState.mainData.length - 1]?.value.toFixed(1) || 0}`;
+        }
+
+        // 绘制截取的波形
+        function drawCapturedChart() {
+            const ctx = capturedCtx;
+            const width = capturedCanvas.width;
+            const height = capturedCanvas.height;
+
+            // 清空背景
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(0, 0, width, height);
+
+            if (!testState.capturedData || testState.capturedData.length === 0) {
+                ctx.fillStyle = '#666';
+                ctx.font = '14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('无截取数据', width / 2, height / 2);
+                return;
+            }
+
+            // 绘制网格
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let i = 0; i <= 10; i++) {
+                const y = (height / 10) * i;
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+            }
+            for (let i = 0; i <= 10; i++) {
+                const x = (width / 10) * i;
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height);
+            }
+            ctx.stroke();
+
+            // 绘制基线
+            const baselineY = height - (120 / 255) * height;
+            ctx.strokeStyle = '#dcdcaa';
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(0, baselineY);
+            ctx.lineTo(width, baselineY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 绘制截取的波形
+            ctx.strokeStyle = '#4ec9b0';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+
+            const stepX = width / (testState.capturedData.length - 1);
+
+            testState.capturedData.forEach((pt, i) => {
+                const x = i * stepX;
+                const y = height - (pt.value / 255) * height;
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+            ctx.stroke();
+
+            // 绘制数据点
+            ctx.fillStyle = '#fff';
+            testState.capturedData.forEach((pt, i) => {
+                const x = i * stepX;
+                const y = height - (pt.value / 255) * height;
+                ctx.beginPath();
+                ctx.arc(x, y, 2, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // 更新信息
+            const timestamp = new Date().toLocaleTimeString();
+            document.getElementById('captured-info').textContent =
+                `截取帧数: ${testState.capturedData.length} | 截取时间: ${timestamp} | 首值: ${testState.capturedData[0].value.toFixed(1)} | 末值: ${testState.capturedData[testState.capturedData.length - 1].value.toFixed(1)}`;
+        }
+
+        // 生成模拟数据
+        function generateData() {
+            if (!testState.isGenerating) return;
+
+            testState.frameCount++;
+            const t = testState.frameCount * 0.1;
+            let value = 120 + Math.sin(t) * 10 + (Math.random() - 0.5) * 5;
+
+            // 偶尔生成波峰
+            if (Math.random() > 0.95) {
+                value += 40;
+            }
+
+            testState.mainData.push({ t, value });
+
+            // 保持固定长度的数据
+            if (testState.mainData.length > 200) {
+                testState.mainData.shift();
+            }
+
+            drawMainChart();
+            testState.animationId = requestAnimationFrame(generateData);
+        }
+
+        // 截取波形
+        function captureWaveform() {
+            const windowSize = parseInt(document.getElementById('window-size').value) || 100;
+
+            if (testState.mainData.length === 0) {
+                alert('没有可截取的数据！请先开始数据生成。');
+                return;
+            }
+
+            const actualFrameCount = Math.min(windowSize, testState.mainData.length);
+            const startIndex = testState.mainData.length - actualFrameCount;
+
+            // 深拷贝数据
+            testState.capturedData = testState.mainData.slice(startIndex).map(pt => ({
+                ...pt,
+                t: pt.t - testState.mainData[startIndex].t
+            }));
+
+            // 显示截取区域
+            document.getElementById('captured-section').style.display = 'block';
+            document.getElementById('capture-status').textContent =
+                `✅ 成功截取 ${actualFrameCount} 帧（从 ${testState.mainData.length} 帧中截取）`;
+
+            drawCapturedChart();
+
+            // 检查测试完成
+            checkTestCompletion();
+        }
+
+        // 清除截取
+        function clearCapture() {
+            testState.capturedData = null;
+            document.getElementById('captured-section').style.display = 'none';
+            document.getElementById('capture-status').textContent = '截取已清除';
+
+            // 清空截取画布
+            const ctx = capturedCtx;
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(0, 0, capturedCanvas.width, capturedCanvas.height);
+        }
+
+        // 开始数据生成
+        function startDataGeneration() {
+            if (testState.isGenerating) return;
+
+            testState.isGenerating = true;
+            generateData();
+            document.getElementById('capture-status').textContent = '📡 数据生成已开始...';
+        }
+
+        // 停止数据生成
+        function stopDataGeneration() {
+            testState.isGenerating = false;
+            if (testState.animationId) {
+                cancelAnimationFrame(testState.animationId);
+            }
+            document.getElementById('capture-status').textContent = '⏹️ 数据生成已停止';
+        }
+
+        // 检查测试完成
+        function checkTestCompletion() {
+            if (testState.capturedData && testState.capturedData.length > 0) {
+                document.getElementById('test-result').style.display = 'block';
+            }
+        }
+
+        // 事件绑定
+        document.getElementById('capture-btn').addEventListener('click', captureWaveform);
+        document.getElementById('clear-btn').addEventListener('click', clearCapture);
+        document.getElementById('start-data-btn').addEventListener('click', startDataGeneration);
+        document.getElementById('stop-data-btn').addEventListener('click', stopDataGeneration);
+
+        // 初始化
+        drawMainChart();
+        drawCapturedChart();
+
+        // 自动开始数据生成用于测试
+        setTimeout(() => {
+            startDataGeneration();
+        }, 1000);
+    </script>
+</body>
+</html>

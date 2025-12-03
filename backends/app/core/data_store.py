@@ -19,6 +19,17 @@ class Frame:
     value: float
 
 
+@dataclass
+class RoiFrame:
+    """ROI截图帧数据"""
+    index: int
+    timestamp: datetime
+    gray_value: float
+    roi_config: RoiConfig
+    frame_count: int  # 主信号帧计数
+    capture_duration: float  # ROI截图持续时间
+
+
 class DataStore:
     """
     内存中的时序数据存储，线程安全。
@@ -29,6 +40,12 @@ class DataStore:
         self._buffer_size = buffer_size
         self._frames: Deque[Frame] = deque(maxlen=buffer_size)
         self._lock = threading.Lock()
+
+        # ROI历史数据存储 - 独立于主信号数据
+        # 默认存储最近500个ROI截图帧（约4分钟，按2FPS计算）
+        roi_buffer_size = 500
+        self._roi_frames: Deque[RoiFrame] = deque(maxlen=roi_buffer_size)
+        self._roi_frame_count: int = 0
 
         self._frame_count: int = 0
         self._current_value: float = 0.0
@@ -226,6 +243,86 @@ class DataStore:
                 self._roi_configured,
                 self._roi_config
             )
+
+    # ROI历史数据操作
+    def add_roi_frame(
+        self,
+        gray_value: float,
+        roi_config: RoiConfig,
+        frame_count: int,
+        capture_duration: float = 0.5,
+        timestamp: Optional[datetime] = None,
+    ) -> RoiFrame:
+        """添加ROI截图帧数据"""
+        if timestamp is None:
+            timestamp = datetime.utcnow()
+
+        with self._lock:
+            self._roi_frame_count += 1
+            roi_frame = RoiFrame(
+                index=self._roi_frame_count,
+                timestamp=timestamp,
+                gray_value=gray_value,
+                roi_config=roi_config,
+                frame_count=frame_count,
+                capture_duration=capture_duration
+            )
+            self._roi_frames.append(roi_frame)
+
+            self._logger.info(
+                "Added ROI frame index=%d gray_value=%.2f frame_count=%d buffer_size=%d",
+                self._roi_frame_count,
+                gray_value,
+                frame_count,
+                len(self._roi_frames)
+            )
+
+            return roi_frame
+
+    def get_roi_series(self, count: int) -> List[RoiFrame]:
+        """获取最近N个ROI帧数据"""
+        with self._lock:
+            roi_frames = list(self._roi_frames)
+
+        if count >= len(roi_frames):
+            return roi_frames
+        return roi_frames[-count:]
+
+    def get_roi_status_snapshot(self) -> Tuple[int, int, float, int]:
+        """获取ROI数据状态快照"""
+        with self._lock:
+            return (
+                self._roi_frame_count,
+                len(self._roi_frames),
+                self._roi_frames[-1].gray_value if self._roi_frames else 0.0,
+                self._roi_frames[-1].frame_count if self._roi_frames else 0
+            )
+
+    def get_roi_frame_rate_info(self) -> Tuple[float, int]:
+        """获取ROI帧率信息"""
+        with self._lock:
+            if len(self._roi_frames) < 2:
+                return 0.0, len(self._roi_frames)
+
+            # 计算实际ROI帧率
+            recent_frames = list(self._roi_frames)[-10:]  # 取最近10帧
+            if len(recent_frames) >= 2:
+                time_span = (recent_frames[-1].timestamp - recent_frames[0].timestamp).total_seconds()
+                if time_span > 0:
+                    actual_fps = (len(recent_frames) - 1) / time_span
+                else:
+                    actual_fps = 0.0
+            else:
+                actual_fps = 0.0
+
+            return actual_fps, len(self._roi_frames)
+
+    def reset_roi_history(self) -> None:
+        """重置ROI历史数据"""
+        with self._lock:
+            self._roi_frames.clear()
+            self._roi_frame_count = 0
+        self._logger.warning("ROI history has been reset")
 
 
 # 单例数据存储
