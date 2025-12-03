@@ -378,70 +378,85 @@
 
     <!-- SIDEBAR -->
     <div class="sidebar">
-        <!-- 3.1 系统状态面板 -->
+        <!-- 1.1 控制台面板 -->
         <div class="panel">
-            <div class="panel-header">系统状态</div>
+            <div class="panel-header">控制台</div>
             <div class="panel-content">
                 <div class="status-row">
-                    <span>连接状态</span>
-                    <div>
-                        <span id="connection-indicator" class="indicator disconnected"></span>
-                        <span id="connection-text">Disconnected</span>
-                    </div>
+                    <span>状态:</span>
+                    <span id="detection-state" style="color:var(--accent-color); font-weight:bold;">IDLE</span>
                 </div>
-                <div class="status-row">
-                    <span>帧数计数</span>
-                    <span id="frame-count" class="status-value">0</span>
+                <div class="control-group">
+                    <button id="start-btn">开始检测</button>
+                    <button id="stop-btn" class="danger" disabled>停止</button>
+                    <button id="pause-btn" disabled>暂停</button>
+                    <button id="resume-btn" disabled>恢复</button>
                 </div>
-                <div class="status-row">
-                    <span>当前值</span>
-                    <span id="current-value" class="status-value">0.00</span>
-                </div>
-                <div class="status-row">
-                    <span>基线值</span>
-                    <span id="baseline-value" class="status-value">0.00</span>
-                </div>
-                <div class="status-row">
-                    <span>波峰信号</span>
-                    <span id="peak-signal" class="status-value signal-none">NULL</span>
-                </div>
-                 <div class="status-row">
-                    <span>缓冲区</span>
-                    <span id="buffer-size" class="status-value">0</span>
-                </div>
-                <div class="status-row">
-                    <span>FPS</span>
-                    <span id="update-rate" class="status-value">0 Hz</span>
-                </div>
+                <button id="refresh-status-btn" style="width: 100%; margin-top: 5px;">刷新系统状态</button>
             </div>
         </div>
 
-        <!-- 3.2 显示控制面板 -->
+        <!-- 1.2 波形截取面板 -->
         <div class="panel">
-            <div class="panel-header">显示控制</div>
+            <div class="panel-header">波形截取</div>
             <div class="panel-content">
-                <label class="toggle-switch">
-                    <input type="checkbox" id="show-grid" checked>
-                    <div class="slider"></div>
-                    <span>显示网格</span>
-                </label>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="show-baseline" checked>
-                    <div class="slider"></div>
-                    <span>显示基线</span>
-                </label>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="show-points" checked>
-                    <div class="slider"></div>
-                    <span>显示数据点</span>
-                </label>
-                
+                <!-- 数据源选择 -->
+                <div class="status-row">
+                    <span>数据源:</span>
+                    <div>
+                        <label style="display: flex; align-items: center; gap: 8px;">
+                            <input type="radio" id="data-source-main" name="data-source" value="main">
+                            <span>主信号数据</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; margin-left: 12px;">
+                            <input type="radio" id="data-source-roi" name="data-source" value="roi" checked>
+                            <span>ROI灰度数据</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 截取窗口大小设置 -->
                 <div class="range-slider-container">
                     <div class="status-row">
-                        <span>Y轴缩放</span>
-                        <span id="zoom-value" class="status-value">1.0x</span>
+                        <span>窗口大小</span>
+                        <span id="capture-window-size" class="status-value">100 帧</span>
                     </div>
-                    <input type="range" id="zoom-slider" min="0.5" max="3.0" step="0.1" value="1.0">
+                    <input type="range" id="capture-window-slider" min="50" max="200" step="10" value="100">
+                </div>
+
+                <!-- 截取状态指示 -->
+                <div class="status-row">
+                    <span>截取状态:</span>
+                    <div>
+                        <span id="capture-status-indicator" class="indicator disconnected"></span>
+                        <span id="capture-status-text">等待截取</span>
+                    </div>
+                </div>
+
+                <!-- 截取按钮 -->
+                <button id="capture-btn" style="width: 100%; height: 35px; font-size: 14px; font-weight: 600; margin: 10px 0;">
+                    📸 立即截取
+                </button>
+
+                <!-- 截取信息显示 -->
+                <div id="capture-info" style="display: none;">
+                    <hr style="border: 1px solid var(--border-color); margin: 10px 0;">
+                    <div class="status-row">
+                        <span>数据类型:</span>
+                        <span id="captured-data-type" class="status-value">ROI灰度数据</span>
+                    </div>
+                    <div class="status-row">
+                        <span>截取帧数:</span>
+                        <span id="captured-frame-count" class="status-value">0</span>
+                    </div>
+                    <div class="status-row">
+                        <span>帧范围:</span>
+                        <span id="captured-frame-range" class="status-value">0-0</span>
+                    </div>
+                    <div class="status-row">
+                        <span>持续时间:</span>
+                        <span id="captured-duration" class="status-value">0.00s</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -510,71 +525,7 @@
             </div>
         </div>
 
-        <!-- 3.5 波形截取面板 -->
-        <div class="panel">
-            <div class="panel-header">波形截取</div>
-            <div class="panel-content">
-                <!-- 数据源选择 -->
-                <div class="status-row">
-                    <span>数据源:</span>
-                    <div>
-                        <label style="display: flex; align-items: center; gap: 8px;">
-                            <input type="radio" id="data-source-main" name="data-source" value="main">
-                            <span>主信号数据</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 8px; margin-left: 12px;">
-                            <input type="radio" id="data-source-roi" name="data-source" value="roi" checked>
-                            <span>ROI灰度数据</span>
-                        </label>
-                    </div>
-                </div>
-
-                <!-- 截取窗口大小设置 -->
-                <div class="range-slider-container">
-                    <div class="status-row">
-                        <span>窗口大小</span>
-                        <span id="capture-window-size" class="status-value">100 帧</span>
-                    </div>
-                    <input type="range" id="capture-window-slider" min="50" max="200" step="10" value="100">
-                </div>
-
-                <!-- 截取状态指示 -->
-                <div class="status-row">
-                    <span>截取状态:</span>
-                    <div>
-                        <span id="capture-status-indicator" class="indicator disconnected"></span>
-                        <span id="capture-status-text">等待截取</span>
-                    </div>
-                </div>
-
-                <!-- 截取按钮 -->
-                <button id="capture-btn" style="width: 100%; height: 35px; font-size: 14px; font-weight: 600; margin: 10px 0;">
-                    📸 立即截取
-                </button>
-
-                <!-- 截取信息显示 -->
-                <div id="capture-info" style="display: none;">
-                    <hr style="border: 1px solid var(--border-color); margin: 10px 0;">
-                    <div class="status-row">
-                        <span>数据类型:</span>
-                        <span id="captured-data-type" class="status-value">ROI灰度数据</span>
-                    </div>
-                    <div class="status-row">
-                        <span>截取帧数:</span>
-                        <span id="captured-frame-count" class="status-value">0</span>
-                    </div>
-                    <div class="status-row">
-                        <span>帧范围:</span>
-                        <span id="captured-frame-range" class="status-value">0-0</span>
-                    </div>
-                    <div class="status-row">
-                        <span>持续时间:</span>
-                        <span id="captured-duration" class="status-value">0.00s</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
+        
         <!-- 3.6 波峰检测配置面板 -->
         <div class="panel">
             <div class="panel-header">波峰检测设置</div>
@@ -642,21 +593,72 @@
             </div>
         </div>
 
-        <!-- 3.7 检测控制面板 -->
-        <div class="panel">
-            <div class="panel-header">控制台</div>
-            <div class="panel-content">
+      
+        <!-- 系统状态面板 - 已隐藏 -->
+        <div class="panel" style="display: none;">
+            <div class="panel-header">系统状态</div>
+            <div class="panel-content" style="display: none;">
                 <div class="status-row">
-                    <span>状态:</span>
-                    <span id="detection-state" style="color:var(--accent-color); font-weight:bold;">IDLE</span>
+                    <span>连接状态</span>
+                    <div>
+                        <span id="connection-indicator" class="indicator disconnected"></span>
+                        <span id="connection-text">Disconnected</span>
+                    </div>
                 </div>
-                <div class="control-group">
-                    <button id="start-btn">开始检测</button>
-                    <button id="stop-btn" class="danger" disabled>停止</button>
-                    <button id="pause-btn" disabled>暂停</button>
-                    <button id="resume-btn" disabled>恢复</button>
+                <div class="status-row">
+                    <span>帧数计数</span>
+                    <span id="frame-count" class="status-value">0</span>
                 </div>
-                <button id="refresh-status-btn" style="width: 100%; margin-top: 5px;">刷新系统状态</button>
+                <div class="status-row">
+                    <span>当前值</span>
+                    <span id="current-value" class="status-value">0.00</span>
+                </div>
+                <div class="status-row">
+                    <span>基线值</span>
+                    <span id="baseline-value" class="status-value">0.00</span>
+                </div>
+                <div class="status-row">
+                    <span>波峰信号</span>
+                    <span id="peak-signal" class="status-value signal-none">NULL</span>
+                </div>
+                 <div class="status-row">
+                    <span>缓冲区</span>
+                    <span id="buffer-size" class="status-value">0</span>
+                </div>
+                <div class="status-row">
+                    <span>FPS</span>
+                    <span id="update-rate" class="status-value">0 Hz</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 显示控制面板 - 已隐藏 -->
+        <div class="panel" style="display: none;">
+            <div class="panel-header">显示控制</div>
+            <div class="panel-content" style="display: none;">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="show-grid" checked>
+                    <div class="slider"></div>
+                    <span>显示网格</span>
+                </label>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="show-baseline" checked>
+                    <div class="slider"></div>
+                    <span>显示基线</span>
+                </label>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="show-points" checked>
+                    <div class="slider"></div>
+                    <span>显示数据点</span>
+                </label>
+
+                <div class="range-slider-container">
+                    <div class="status-row">
+                        <span>Y轴缩放</span>
+                        <span id="zoom-value" class="status-value">1.0x</span>
+                    </div>
+                    <input type="range" id="zoom-slider" min="0.5" max="3.0" step="0.1" value="1.0">
+                </div>
             </div>
         </div>
     </div>
@@ -813,7 +815,7 @@
                     return await response.json();
                 } catch(e) {
                     console.error("Set ROI config error:", e);
-                    return { success: false, error: str(e) };
+                    return { success: false, error: String(e) };
                 }
             },
 
@@ -843,7 +845,7 @@
                     return await response.json();
                 } catch(e) {
                     console.error("Set ROI frame rate error:", e);
-                    return { success: false, error: str(e) };
+                    return { success: false, error: String(e) };
                 }
             },
 
@@ -901,6 +903,52 @@
                     return await response.json();
                 } catch(e) {
                     console.error("ROI window capture error:", e);
+                    return { success: false, error: e.message };
+                }
+            },
+
+            // ROI窗口截取带波峰检测API
+            async captureRoiWindowWithPeaks(count = 100, threshold = null, marginFrames = null, differenceThreshold = null) {
+                try {
+                    const url = `${appState.serverUrl}/data/roi-window-capture-with-peaks?count=${count}&threshold=${threshold}&margin_frames=${marginFrames}&difference_threshold=${differenceThreshold}`;
+                    console.log(`🔍 请求ROI窗口波峰检测: ${url}`);
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    const data = await response.json();
+                    console.log('📊 ROI窗口波峰检测响应:', data);
+
+                    // 打印波峰检测结果到控制台
+                    if (data.peak_detection_results) {
+                        console.log('\n=== 🎯 ROI窗口波峰检测结果 ===');
+                        const results = data.peak_detection_results;
+                        if (results.error) {
+                            console.error('❌ 波峰检测失败:', results.error);
+                        } else {
+                            console.log(`✅ 检测完成 - 总计: ${results.total_peaks} 个波峰`);
+                            console.log(`🟢 绿色波峰 (稳定): ${results.green_peak_count} 个:`, results.green_peaks);
+                            console.log(`🔴 红色波峰 (不稳定): ${results.red_peak_count} 个:`, results.red_peaks);
+
+                            // 详细打印每个波峰信息
+                            if (results.green_peaks.length > 0) {
+                                console.log('🟢 绿色波峰详细信息:');
+                                results.green_peaks.forEach((peak, index) => {
+                                    console.log(`   ${index + 1}. 帧范围: ${peak[0]} - ${peak[1]} (持续 ${peak[1] - peak[0] + 1} 帧)`);
+                                });
+                            }
+
+                            if (results.red_peaks.length > 0) {
+                                console.log('🔴 红色波峰详细信息:');
+                                results.red_peaks.forEach((peak, index) => {
+                                    console.log(`   ${index + 1}. 帧范围: ${peak[0]} - ${peak[1]} (持续 ${peak[1] - peak[0] + 1} 帧)`);
+                                });
+                            }
+                        }
+                        console.log('=== 波峰检测结束 ===\n');
+                    }
+
+                    return data;
+                } catch(e) {
+                    console.error("ROI window capture with peaks error:", e);
                     return { success: false, error: e.message };
                 }
             }
@@ -1194,7 +1242,15 @@
 
                     let response;
                     if (dataSource === 'roi') {
-                        response = await ApiService.captureRoiWindow(this.captureSettings.windowSize);
+                        // 使用带波峰检测的ROI截取API
+                        console.log('🎯 开始ROI窗口截取并执行波峰检测...');
+                        const currentConfig = appState.peakConfig;
+                        response = await ApiService.captureRoiWindowWithPeaks(
+                            this.captureSettings.windowSize,
+                            currentConfig?.threshold || 105.0,  // 使用配置值
+                            currentConfig?.margin_frames || 5,      // 使用配置值
+                            currentConfig?.difference_threshold || 2.1     // 使用配置值
+                        );
                     } else {
                         response = await ApiService.captureWindow(this.captureSettings.windowSize);
                     }
@@ -1258,8 +1314,17 @@
                     const avgValue = values.reduce((a, b) => a + b, 0) / values.length;
                     const valueRange = maxValue - minValue;
 
-                    // 更新子波形信息，包含统计
-                    this.elements.info.textContent = `${data.series.length} ROI帧 | ${duration.toFixed(2)}s | 灰度范围: ${minValue.toFixed(0)}-${maxValue.toFixed(0)}`;
+                    // 基础信息文本
+                    let infoText = `${data.series.length} ROI帧 | ${duration.toFixed(2)}s | 灰度范围: ${minValue.toFixed(0)}-${maxValue.toFixed(0)}`;
+
+                    // 添加波峰检测信息
+                    if (data.peak_detection_results && !data.peak_detection_results.error) {
+                        const results = data.peak_detection_results;
+                        infoText += ` | 🎯波峰: ${results.total_peaks}个(🟢${results.green_peak_count} 🔴${results.red_peak_count})`;
+                    }
+
+                    // 更新子波形信息，包含统计和波峰检测
+                    this.elements.info.textContent = infoText;
 
                     console.log(`WaveformCapture: Displaying captured ROI data summary:`);
                     console.log(`  - ROI Frames: ${data.series.length}`);
@@ -1268,6 +1333,20 @@
                     console.log(`  - Duration: ${duration.toFixed(2)}s`);
                     console.log(`  - Gray value range: ${minValue.toFixed(1)} - ${maxValue.toFixed(1)} (span: ${valueRange.toFixed(1)})`);
                     console.log(`  - Average gray value: ${avgValue.toFixed(1)}`);
+
+                    // 显示波峰检测结果
+                    if (data.peak_detection_results) {
+                        console.log(`  - 🎯 Peak Detection Results:`);
+                        if (data.peak_detection_results.error) {
+                            console.log(`    ❌ Error: ${data.peak_detection_results.error}`);
+                        } else {
+                            console.log(`    ✅ Total peaks: ${data.peak_detection_results.total_peaks}`);
+                            console.log(`    🟢 Green peaks (stable): ${data.peak_detection_results.green_peak_count}`);
+                            console.log(`    🔴 Red peaks (unstable): ${data.peak_detection_results.red_peak_count}`);
+                            console.log(`    📍 Green peak ranges:`, data.peak_detection_results.green_peaks);
+                            console.log(`    📍 Red peak ranges:`, data.peak_detection_results.red_peaks);
+                        }
+                    }
 
                 } else {
                     // 主信号数据信息显示
@@ -2038,6 +2117,75 @@
             document.getElementById('roi-height').textContent = `${height} px`;
         }
 
+        // 保存配置到localStorage
+        function saveConfiguration() {
+            // 保存ROI配置
+            const roiConfig = {
+                x1: parseInt(document.getElementById('roi-x1').value) || 0,
+                y1: parseInt(document.getElementById('roi-y1').value) || 0,
+                x2: parseInt(document.getElementById('roi-x2').value) || 0,
+                y2: parseInt(document.getElementById('roi-y2').value) || 0,
+                frameRate: parseInt(document.getElementById('roi-frame-rate').value) || 2,
+                lastUpdated: new Date().toISOString()
+            };
+            localStorage.setItem('newfem_roi_config', JSON.stringify(roiConfig));
+
+            // 保存波峰检测配置（使用现有的函数）
+            const peakConfig = {
+                threshold: parseFloat(document.getElementById('peak-threshold').value) || 105.0,
+                margin_frames: parseInt(document.getElementById('peak-margin-frames').value) || 5,
+                difference_threshold: parseFloat(document.getElementById('peak-difference-threshold').value) || 2.1,
+                min_region_length: parseInt(document.getElementById('peak-min-region-length').value) || 3
+            };
+            savePeakDetectionConfigToLocalStorage(peakConfig);
+
+            console.log('Configuration saved to localStorage');
+        }
+
+        // 从localStorage加载ROI配置
+        function loadRoiConfigFromStorage() {
+            const savedConfig = localStorage.getItem('newfem_roi_config');
+            if (savedConfig) {
+                try {
+                    const config = JSON.parse(savedConfig);
+                    return config;
+                } catch (e) {
+                    console.warn('Failed to parse saved ROI configuration:', e);
+                    return null;
+                }
+            }
+            return null;
+        }
+
+        // 应用保存的配置到界面
+        function applySavedConfigToUI() {
+            // 加载并应用ROI配置
+            const roiConfig = loadRoiConfigFromStorage();
+            if (roiConfig) {
+                document.getElementById('roi-x1').value = roiConfig.x1;
+                document.getElementById('roi-y1').value = roiConfig.y1;
+                document.getElementById('roi-x2').value = roiConfig.x2;
+                document.getElementById('roi-y2').value = roiConfig.y2;
+                document.getElementById('roi-frame-rate').value = roiConfig.frameRate;
+                updateRoiDisplay();
+                updateRoiFrameRateDisplay();
+                console.log('ROI configuration loaded from localStorage:', roiConfig);
+            }
+
+            // 加载并应用波峰检测配置（使用现有的函数）
+            const peakConfig = loadPeakDetectionConfigFromLocalStorage();
+            if (peakConfig) {
+                document.getElementById('peak-threshold').value = peakConfig.threshold;
+                document.getElementById('peak-margin-frames').value = peakConfig.margin_frames;
+                document.getElementById('peak-difference-threshold').value = peakConfig.difference_threshold;
+                document.getElementById('peak-min-region-length').value = peakConfig.min_region_length;
+                console.log('Peak detection configuration loaded from localStorage:', peakConfig);
+            }
+
+            // 返回是否有任何配置被加载
+            return roiConfig || peakConfig;
+        }
+
         async function applyRoiConfig() {
             try {
                 const x1 = parseInt(document.getElementById('roi-x1').value) || 0;
@@ -2088,6 +2236,11 @@
                     updateRoiFrameRateDisplay();
                 } else {
                     console.warn('ROI帧率设置失败: ' + (frameRateResponse?.error || '未知错误'));
+                }
+
+                // 保存配置到localStorage (仅在ROI配置成功时保存)
+                if (roiResponse && roiResponse.success) {
+                    saveConfiguration();
                 }
 
                 updateUI();  // 更新UI状态
@@ -2244,33 +2397,34 @@
 
         async function applyPeakDetectionConfig() {
             try {
+                // 只读取4个参数
                 const threshold = parseFloat(document.getElementById('peak-threshold').value) || 105.0;
                 const marginFrames = parseInt(document.getElementById('peak-margin-frames').value) || 5;
                 const differenceThreshold = parseFloat(document.getElementById('peak-difference-threshold').value) || 2.1;
                 const minRegionLength = parseInt(document.getElementById('peak-min-region-length').value) || 3;
 
-                // 验证参数范围
+                // 基本参数验证
                 if (threshold < 50.0 || threshold > 255.0) {
-                    alert('绝对阈值无效：必须在50.0-255.0之间');
+                    console.warn('绝对阈值超出范围：', threshold);
                     return;
                 }
 
                 if (marginFrames < 1 || marginFrames > 20) {
-                    alert('边界扩展帧数无效：必须在1-20之间');
+                    console.warn('边界扩展帧数超出范围：', marginFrames);
                     return;
                 }
 
                 if (differenceThreshold < 0.1 || differenceThreshold > 10.0) {
-                    alert('颜色分类阈值无效：必须在0.1-10.0之间');
+                    console.warn('颜色分类阈值超出范围：', differenceThreshold);
                     return;
                 }
 
                 if (minRegionLength < 1 || minRegionLength > 20) {
-                    alert('最小区域长度无效：必须在1-20之间');
+                    console.warn('最小区域长度超出范围：', minRegionLength);
                     return;
                 }
 
-                // 发送API请求
+                // 只保存配置到localStorage
                 const config = {
                     threshold: threshold,
                     margin_frames: marginFrames,
@@ -2278,22 +2432,11 @@
                     min_region_length: minRegionLength
                 };
 
-                const response = await ApiService.setPeakDetectionConfig(config);
-                if (response && response.success) {
-                    // 更新应用状态
-                    appState.peakConfig = config;
+                savePeakDetectionConfigToLocalStorage(config);
+                console.log('波峰检测配置已保存到本地:', config);
 
-                    // 保存配置到localStorage
-                    savePeakDetectionConfigToLocalStorage(config);
-
-                    console.log('波峰检测配置应用成功:', response);
-                    // 移除成功弹框，实现无干扰应用
-                } else {
-                    alert('波峰检测配置应用失败: ' + (response?.error || '未知错误'));
-                }
             } catch (error) {
-                console.error('Apply peak detection config error:', error);
-                alert('波峰检测配置应用失败: ' + error.message);
+                console.error('保存波峰检测配置失败:', error);
             }
         }
 
@@ -2403,6 +2546,11 @@
             const roiInputs = ['roi-x1', 'roi-y1', 'roi-x2', 'roi-y2'];
             roiInputs.forEach(id => {
                 document.getElementById(id).addEventListener('input', updateRoiDisplay);
+                // 添加配置自动保存
+                document.getElementById(id).addEventListener('change', () => {
+                    console.log('ROI configuration changed, auto-saving...');
+                    saveConfiguration();
+                });
             });
 
             document.getElementById('apply-roi-btn').addEventListener('click', applyRoiConfig);
@@ -2410,9 +2558,104 @@
             // ROI帧率控制
             document.getElementById('roi-frame-rate').addEventListener('input', updateRoiFrameRateDisplay);
             document.getElementById('roi-frame-rate').addEventListener('change', applyRoiFrameRate);
+            // 添加帧率配置自动保存
+            document.getElementById('roi-frame-rate').addEventListener('change', () => {
+                console.log('ROI frame rate changed, auto-saving...');
+                saveConfiguration();
+            });
 
             // 波峰检测配置控制
             document.getElementById('apply-peak-config-btn').addEventListener('click', applyPeakDetectionConfig);
+
+            // 添加波峰检测配置实时同步和自动保存
+            const peakInputs = ['peak-threshold', 'peak-margin-frames', 'peak-difference-threshold', 'peak-min-region-length'];
+
+            // 防抖函数，避免频繁API调用
+            function debounce(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
+            }
+
+            // 实时同步阈值和边界扩展参数到后端
+            const syncThresholdParameters = debounce(async () => {
+                try {
+                    const threshold = parseFloat(document.getElementById('peak-threshold').value) || 105.0;
+                    const marginFrames = parseInt(document.getElementById('peak-margin-frames').value) || 5;
+
+                    // 基本验证
+                    if (threshold < 50.0 || threshold > 255.0 || marginFrames < 1 || marginFrames > 20) {
+                        console.warn('Invalid parameters, skipping sync:', { threshold, marginFrames });
+                        return;
+                    }
+
+                    // 发送到后端
+                    const config = {
+                        threshold: threshold,
+                        margin_frames: marginFrames
+                    };
+
+                    console.log('Syncing threshold parameters to backend:', config);
+                    const response = await ApiService.setPeakDetectionConfig(config);
+                    if (response && response.success) {
+                        console.log('Threshold parameters synced successfully');
+                    }
+                } catch (error) {
+                    console.error('Failed to sync threshold parameters:', error);
+                }
+            }, 500); // 500ms防抖
+
+            peakInputs.forEach(id => {
+                // 为阈值和边界扩展添加实时input事件监听
+                if (id === 'peak-threshold' || id === 'peak-margin-frames') {
+                    document.getElementById(id).addEventListener('input', () => {
+                        console.log(`Real-time parameter change: ${id}`);
+                        syncThresholdParameters();
+                    });
+                }
+
+                // 保持原有的change事件监听用于本地保存
+                document.getElementById(id).addEventListener('change', () => {
+                    console.log('Peak detection configuration changed, auto-saving...');
+                    saveConfiguration();
+                });
+            });
+
+            // 自动加载保存的配置
+            const hasSavedConfig = applySavedConfigToUI();
+
+            // 如果有保存的配置，延迟自动应用
+            if (hasSavedConfig) {
+                setTimeout(() => {
+                    // 自动应用ROI配置
+                    const roiX1 = parseInt(document.getElementById('roi-x1').value);
+                    const roiY1 = parseInt(document.getElementById('roi-y1').value);
+                    const roiX2 = parseInt(document.getElementById('roi-x2').value);
+                    const roiY2 = parseInt(document.getElementById('roi-y2').value);
+
+                    if (roiX1 > 0 || roiY1 > 0 || roiX2 > 0 || roiY2 > 0) {
+                        console.log('Auto-applying saved ROI configuration...');
+                        applyRoiConfig().catch(error => {
+                            console.warn('Failed to auto-apply ROI config:', error);
+                        });
+                    }
+
+                    // 自动应用波峰检测配置
+                    const threshold = parseFloat(document.getElementById('peak-threshold').value);
+                    if (threshold > 0) {
+                        console.log('Auto-applying saved peak detection configuration...');
+                        applyPeakDetectionConfig().catch(error => {
+                            console.warn('Failed to auto-apply peak detection config:', error);
+                        });
+                    }
+                }, 2000); // 延迟2秒让系统初始化完成
+            }
 
             // 启动
             initConnection();

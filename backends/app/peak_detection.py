@@ -316,6 +316,13 @@ def detect_peaks(
         - 绿色波峰：[(start_frame, end_frame), ...] - 稳定的HEM事件
         - 红色波峰：[(start_frame, end_frame), ...] - 不稳定事件
     """
+    # 打印传入的参数
+    print(f"DEBUG detect_peaks 调用参数:")
+    print(f"  curve: 长度={len(curve) if curve else 0}, 范围=[{min(curve):.1f}, {max(curve):.1f}]")
+    print(f"  threshold: {threshold}")
+    print(f"  marginFrames: {marginFrames}")
+    print(f"  differenceThreshold: {differenceThreshold}")
+
     if not curve:
         return [], []
 

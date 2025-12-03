@@ -911,12 +911,20 @@ async def roi_window_capture(
 @router.get("/data/roi-window-capture-with-peaks", response_model=RoiWindowCaptureWithPeaksResponse)
 async def roi_window_capture_with_peaks(
     count: int = Query(100, ge=50, le=500, description="ROI窗口大小：50-500帧"),
-    threshold: float = Query(105.0, ge=0.0, le=255.0, description="波峰检测阈值：0-255"),
-    margin_frames: int = Query(5, ge=1, le=20, description="边界扩展帧数：1-20"),
-    difference_threshold: float = Query(0.5, ge=0.1, le=10.0, description="帧差值阈值：0.1-10.0")
+    threshold: Optional[float] = Query(None, ge=0.0, le=255.0, description="波峰检测阈值：0-255（留空使用配置值）"),
+    margin_frames: Optional[int] = Query(None, ge=1, le=20, description="边界扩展帧数：1-20（留空使用配置值）"),
+    difference_threshold: Optional[float] = Query(None, ge=0.1, le=10.0, description="帧差值阈值：0.1-10.0（留空使用配置值）")
 ) -> RoiWindowCaptureWithPeaksResponse:
     """截取指定帧数的ROI灰度分析历史数据窗口并进行波峰检测分析"""
-    logger.info("🔍 ROI window capture with peak detection requested: count=%d, threshold=%.1f, margin=%d, diff=%.2f",
+    # 使用settings中的默认值，如果查询参数未提供
+    if threshold is None:
+        threshold = settings.peak_threshold
+    if margin_frames is None:
+        margin_frames = settings.peak_margin_frames
+    if difference_threshold is None:
+        difference_threshold = settings.peak_difference_threshold
+
+    logger.info("🔍 ROI window capture with peak detection requested: count=%d, threshold=%.1f, margin=%d, diff=%.2f (using latest config)",
                 count, threshold, margin_frames, difference_threshold)
 
     # 从数据存储中获取指定数量的ROI历史帧
@@ -1044,12 +1052,21 @@ async def roi_window_capture_with_peaks(
 @router.get("/data/waveform-with-peaks")
 async def waveform_with_peaks(
     count: int = Query(100, ge=10, le=500, description="波形数据点数：10-500"),
-    threshold: float = Query(105.0, ge=50.0, le=255.0, description="波峰检测阈值：50-255"),
-    margin_frames: int = Query(5, ge=1, le=20, description="边界扩展帧数：1-20"),
-    difference_threshold: float = Query(2.1, ge=0.1, le=10.0, description="帧差值阈值：0.1-10.0")
+    threshold: Optional[float] = Query(None, ge=50.0, le=255.0, description="波峰检测阈值：50-255（留空使用配置值）"),
+    margin_frames: Optional[int] = Query(None, ge=1, le=20, description="边界扩展帧数：1-20（留空使用配置值）"),
+    difference_threshold: Optional[float] = Query(None, ge=0.1, le=10.0, description="帧差值阈值：0.1-10.0（留空使用配置值）")
 ):
     """生成带有波峰标注的波形图像"""
-    logger.info("🎨 Waveform with peaks image requested: count=%d, threshold=%.1f", count, threshold)
+    # 使用settings中的默认值，如果查询参数未提供
+    if threshold is None:
+        threshold = settings.peak_threshold
+    if margin_frames is None:
+        margin_frames = settings.peak_margin_frames
+    if difference_threshold is None:
+        difference_threshold = settings.peak_difference_threshold
+
+    logger.info("🎨 Waveform with peaks image requested: count=%d, threshold=%.1f, margin=%d, diff=%.2f (using latest config)",
+                count, threshold, margin_frames, difference_threshold)
 
     # 获取ROI历史数据
     roi_frames = data_store.get_roi_series(count)

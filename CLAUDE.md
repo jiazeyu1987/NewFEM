@@ -6,6 +6,37 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 NewFEM (New Focused Emboli Monitor) is a real-time HEM (High-Echoic Events) detection system that simulates a 60 FPS data generation system with peak detection capabilities. The system uses a modern web architecture with FastAPI backend and vanilla JavaScript frontend, communicating via RESTful APIs instead of WebSocket for better compatibility.
 
+## Project Structure
+
+```
+NewFEM/
+├── CLAUDE.md                    # This file - guidance for Claude Code
+├── backends/                    # FastAPI backend application
+│   ├── run.py                  # Main entry point
+│   ├── requirements.txt        # Python dependencies
+│   └── app/
+│       ├── api/
+│       │   └── routes.py      # FastAPI routes and endpoints
+│       ├── core/
+│       │   ├── processor.py   # Background data processing (60 FPS)
+│       │   ├── data_store.py  # Thread-safe circular buffer
+│       │   ├── roi_capture.py # ROI capture functionality
+│       │   └── enhanced_peak_detector.py
+│       ├── utils/
+│       │   └── roi_image_generator.py
+│       ├── config.py          # Pydantic settings
+│       ├── models.py          # Pydantic models
+│       └── logging_config.py  # Logging configuration
+├── fronted/                    # Frontend application (note: typo in name)
+│   └── index.html             # Complete vanilla JS application
+└── doc/                       # Comprehensive documentation
+    ├── system-architecture.md
+    ├── api-interface-spec.md
+    ├── backend-requirements.md
+    ├── frontend-requirements.md
+    └── data-specifications.md
+```
+
 ## Common Commands
 
 ### Running the Application
@@ -32,11 +63,8 @@ cd backends && uvicorn app.api.routes:app --reload --host 0.0.0.0 --port 8421
 # Simply open fronted/index.html in browser or use HTTP server
 ```
 
-### Testing and Code Quality
+### Code Quality
 ```bash
-# Backend testing
-cd backends && python -m pytest  # (if pytest is configured)
-
 # Code formatting
 cd backends && black .
 
@@ -44,11 +72,14 @@ cd backends && black .
 cd backends && mypy .
 ```
 
-### Docker Deployment (if needed)
+### Testing
+**Note: No testing framework is currently configured.** The codebase does not include pytest, unittest, or other testing setup. To add testing:
 ```bash
-# Build and run with Docker
-cd backends && docker build -t newfem .
-docker run -p 8421:8421 newfem
+# Install pytest (if needed)
+cd backends && pip install pytest
+
+# Run tests (once configured)
+cd backends && python -m pytest
 ```
 
 ## Architecture Overview
@@ -72,13 +103,18 @@ VS Code-style UI                    60 FPS Signal Simulation
 - `backends/app/api/routes.py`: FastAPI application with all REST endpoints
 - `backends/app/core/processor.py`: Background thread generating simulated data at 60 FPS
 - `backends/app/core/data_store.py`: Thread-safe circular buffer for time-series data
+- `backends/app/core/roi_capture.py`: ROI capture and image processing functionality
+- `backends/app/core/enhanced_peak_detector.py`: Enhanced peak detection algorithms
 - `backends/app/models.py`: Pydantic models for API request/response validation
 - `backends/app/config.py`: Centralized configuration using Pydantic BaseSettings
 - `backends/app/utils/roi_image_generator.py`: Generates ROI visualizations as base64 images
 - `backends/app/logging_config.py`: Structured logging configuration
 
+**Entry Point:**
+- `backends/run.py`: Main application entry point that initializes logging and starts FastAPI server
+
 **Data Flow:**
-1. `DataProcessor` background thread generates sinusoidal signals with noise
+1. `DataProcessor` background thread generates sinusoidal signals with noise (started manually via UI)
 2. Peak detection algorithm identifies signals exceeding threshold (baseline + 5.0)
 3. `DataStore` maintains circular buffer (default 100 points) with thread safety
 4. API endpoints provide real-time access via HTTP polling
@@ -172,20 +208,23 @@ NEWFEM_ENABLE_CORS=True         # CORS configuration
 ## Important Notes
 
 - **Real-time Performance**: System is designed for 60 FPS data generation and 20 FPS display updates
+- **Manual Data Processing**: Data processing must be started manually via the UI control panel (not automatic)
 - **Authentication**: Control commands require password authentication (default: `31415`)
 - **Data Persistence**: No database - uses in-memory circular buffer only
 - **Mock Mode**: Frontend supports offline mock mode for development without backend
 - **Thread Safety**: Critical due to concurrent data generation and API access
 - **Error Handling**: Unified error response format across all API endpoints
 - **Compatibility**: Uses standard HTTP/JSON instead of WebSocket for maximum compatibility
+- **Directory Naming**: Note the typo in directory name "fronted" (should be "frontend")
 
 ## Troubleshooting
 
 ### Common Issues
 - **Connection Refused**: Ensure backend is running on port 8421
-- **No Data Display**: Check if data processing is started via control panel
+- **No Data Display**: Check if data processing is started via control panel (click "开始分析")
 - **Performance Issues**: Reduce polling frequency or buffer size
 - **CORS Errors**: Verify CORS configuration in backend settings
+- **Testing Not Available**: No test framework is currently configured
 
 ### Debug Mode
 - Backend: Set `NEWFEM_LOG_LEVEL=DEBUG` for detailed logs
