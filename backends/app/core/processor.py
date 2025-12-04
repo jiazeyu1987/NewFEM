@@ -142,5 +142,48 @@ class DataProcessor:
                 time.sleep(sleep_time)
         self._logger.info("DataProcessor thread loop exited")
 
+    def reload_peak_detection_config(self) -> bool:
+        """
+        从JSON配置文件重新加载波峰检测配置
+
+        Returns:
+            bool: 重新加载是否成功
+        """
+        try:
+            # 重新加载settings对象（这会从JSON文件读取最新配置）
+            from ..config import AppConfig
+            new_settings = AppConfig.reload_from_json()
+
+            if new_settings:
+                # 创建新的波峰检测配置
+                new_peak_config = PeakDetectionConfig(
+                    threshold=new_settings.peak_threshold,
+                    margin_frames=new_settings.peak_margin_frames,
+                    difference_threshold=new_settings.peak_difference_threshold,
+                    min_region_length=new_settings.peak_min_region_length
+                )
+
+                # 更新增强波峰检测器的配置
+                old_config = self._enhanced_detector._config
+                self._enhanced_detector.update_config(new_peak_config)
+
+                self._logger.info(
+                    "Peak detection config reloaded from JSON: "
+                    "threshold %.1f->%.1f, margin_frames %d->%d, "
+                    "difference_threshold %.1f->%.1f, min_region_length %d->%d",
+                    old_config.threshold, new_peak_config.threshold,
+                    old_config.margin_frames, new_peak_config.margin_frames,
+                    old_config.difference_threshold, new_peak_config.difference_threshold,
+                    old_config.min_region_length, new_peak_config.min_region_length
+                )
+                return True
+            else:
+                self._logger.error("Failed to reload peak detection config from JSON")
+                return False
+
+        except Exception as e:
+            self._logger.error("Error reloading peak detection config: %s", str(e))
+            return False
+
 
 processor = DataProcessor()

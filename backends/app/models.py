@@ -184,6 +184,15 @@ class RoiFrameRateResponse(BaseModel):
     message: str = "ROI frame rate updated successfully"
 
 
+class DataFpsResponse(BaseModel):
+    """数据生成频率设置响应模型"""
+    type: str = "data_fps"
+    timestamp: datetime
+    fps: int
+    success: bool = True
+    message: str = "Data generation FPS updated successfully"
+
+
 class PeakRegionData(BaseModel):
     """波峰区域数据模型"""
     start_frame: int

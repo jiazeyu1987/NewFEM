@@ -3,7 +3,10 @@
     "allow": [
       "Bash(python:*)",
       "Bash(start waveform_demo.html)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(curl:*)",
+      "Bash(git log:*)",
+      "Bash(findstr:*)"
     ],
     "deny": [],
     "ask": []

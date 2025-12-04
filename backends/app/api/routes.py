@@ -39,6 +39,7 @@ from ..models import (
     RoiData,
     RoiFrameRateResponse,
     RoiTimeSeriesPoint,
+    DataFpsResponse,
     RoiWindowCaptureResponse,
     RoiWindowCaptureWithPeaksResponse,
     StatusResponse,
@@ -519,7 +520,7 @@ async def set_roi_config(
     y2: int = Form(...),
     password: str = Form(...),
 ) -> RoiConfigResponse:
-    """设置ROI配置"""
+    """设置ROI配置并保存到JSON文件"""
     verify_password(password)
 
     logger.info("🎯 Setting ROI config: (%d,%d) -> (%d,%d)", x1, y1, x2, y2)
@@ -527,19 +528,43 @@ async def set_roi_config(
     # 创建ROI配置
     roi_config = RoiConfig(x1=x1, y1=y1, x2=x2, y2=y2)
 
-    # 暂时简化验证
+    # 验证坐标
     if not roi_config.validate_coordinates():
         logger.warning("Invalid ROI config: coordinates validation failed")
         raise HTTPException(status_code=400, detail="INVALID_ROI_COORDINATES")
 
-    # 保存配置
+    # 保存到JSON配置文件
     try:
+        from ..core.config_manager import get_config_manager
+        config_manager = get_config_manager()
+
+        # 更新ROI配置
+        roi_updates = {
+            "x1": x1,
+            "y1": y1,
+            "x2": x2,
+            "y2": y2
+        }
+
+        success = config_manager.update_config({"default_config": roi_updates}, section="roi_capture")
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to update ROI configuration")
+
+        # 保存到文件
+        if not config_manager.save_config():
+            raise HTTPException(status_code=500, detail="Failed to save ROI configuration")
+
+        # 同时保存到data_store以保持兼容性
         data_store.set_roi_config(roi_config)
-        logger.info("✅ ROI config set successfully: size=%dx%d, center=(%d,%d)",
+
+        logger.info("✅ ROI config saved to JSON file successfully: size=%dx%d, center=(%d,%d)",
                    roi_config.width, roi_config.height, roi_config.center_x, roi_config.center_y)
-    except ValueError as e:
-        logger.error("Failed to set ROI config: %s", str(e))
-        raise HTTPException(status_code=400, detail="FAILED_TO_SET_ROI_CONFIG")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to save ROI config to JSON: %s", str(e))
+        raise HTTPException(status_code=500, detail="FAILED_TO_SET_ROI_CONFIG")
 
     return RoiConfigResponse(
         timestamp=datetime.utcnow(),
@@ -550,12 +575,35 @@ async def set_roi_config(
 
 @router.get("/roi/config", response_model=RoiConfigResponse)
 async def get_roi_config() -> RoiConfigResponse:
-    """获取当前ROI配置"""
-    roi_config = data_store.get_roi_config()
+    """获取当前ROI配置（优先从JSON文件读取）"""
+    try:
+        # 优先从JSON配置文件读取
+        from ..core.config_manager import get_config_manager
+        config_manager = get_config_manager()
 
-    logger.debug("📍 Current ROI config: (%d,%d) -> (%d,%d), size=%dx%d",
-                roi_config.x1, roi_config.y1, roi_config.x2, roi_config.y2,
-                roi_config.width, roi_config.height)
+        roi_config_dict = config_manager.get_config(section="roi_capture", key="default_config")
+        if roi_config_dict and all(key in roi_config_dict for key in ['x1', 'y1', 'x2', 'y2']):
+            # 从JSON配置创建ROI对象
+            roi_config = RoiConfig(
+                x1=roi_config_dict['x1'],
+                y1=roi_config_dict['y1'],
+                x2=roi_config_dict['x2'],
+                y2=roi_config_dict['y2']
+            )
+            logger.debug("📍 ROI config loaded from JSON: (%d,%d) -> (%d,%d), size=%dx%d",
+                        roi_config.x1, roi_config.y1, roi_config.x2, roi_config.y2,
+                        roi_config.width, roi_config.height)
+        else:
+            # 从data_store读取（向后兼容）
+            roi_config = data_store.get_roi_config()
+            logger.debug("📍 ROI config loaded from data_store: (%d,%d) -> (%d,%d), size=%dx%d",
+                        roi_config.x1, roi_config.y1, roi_config.x2, roi_config.y2,
+                        roi_config.width, roi_config.height)
+
+    except Exception as e:
+        logger.warning(f"Failed to load ROI config from JSON, using data_store: {e}")
+        # 降级到data_store
+        roi_config = data_store.get_roi_config()
 
     return RoiConfigResponse(
         timestamp=datetime.utcnow(),
@@ -659,6 +707,92 @@ async def set_roi_frame_rate(
     )
 
 
+@router.post("/data/fps", response_model=DataFpsResponse)
+async def set_data_fps(
+    fps: int = Form(...),
+    password: str = Form(...),
+) -> DataFpsResponse:
+    """设置数据生成频率"""
+    verify_password(password)
+
+    logger.info("🎯 Setting data generation FPS: %d", fps)
+
+    # 验证FPS范围
+    if not 10 <= fps <= 120:
+        logger.error("Invalid data FPS: %d (must be 10-120)", fps)
+        error = ErrorResponse(
+            timestamp=datetime.utcnow(),
+            error_code="INVALID_FPS",
+            error_message="Data generation FPS must be between 10 and 120",
+            details=ErrorDetails(
+                parameter="fps",
+                value=fps,
+                constraint="10 <= fps <= 120"
+            )
+        )
+        return JSONResponse(status_code=400, content=error.model_dump(mode='json'))
+
+    # 保存到JSON配置文件
+    try:
+        from ..core.config_manager import get_config_manager
+        config_manager = get_config_manager()
+
+        updates = {"fps": fps}
+        success = config_manager.update_config(updates, section="data_processing")
+        config_manager.save_config()
+
+        if not success:
+            error = ErrorResponse(
+                timestamp=datetime.utcnow(),
+                error_code="FPS_SET_FAILED",
+                error_message="Failed to save data FPS to configuration file",
+                details=ErrorDetails(
+                    parameter="fps",
+                    value=fps,
+                    constraint="JSON file write error"
+                )
+            )
+            return JSONResponse(status_code=500, content=error.model_dump(mode='json'))
+
+        logger.info("✅ Data generation FPS saved to JSON file: %d", fps)
+
+    except Exception as e:
+        logger.error("Failed to save data FPS to JSON file: %s", str(e))
+        error = ErrorResponse(
+            timestamp=datetime.utcnow(),
+            error_code="FPS_SET_FAILED",
+            error_message="Failed to save data FPS to configuration file",
+            details=ErrorDetails(
+                parameter="fps",
+                value=fps,
+                constraint=str(e)
+            )
+        )
+        return JSONResponse(status_code=500, content=error.model_dump(mode='json'))
+
+    logger.info("✅ Data generation FPS set successfully to %d", fps)
+
+    return DataFpsResponse(
+        timestamp=datetime.utcnow(),
+        fps=fps,
+        success=True,
+        message=f"Data generation FPS updated to {fps}"
+    )
+
+
+@router.get("/data/fps", response_model=DataFpsResponse)
+async def get_data_fps() -> DataFpsResponse:
+    """获取当前数据生成频率"""
+    from ..config import settings
+
+    return DataFpsResponse(
+        timestamp=datetime.utcnow(),
+        fps=settings.fps,
+        success=True,
+        message=f"Current data generation FPS: {settings.fps}"
+    )
+
+
 # 波峰检测配置端点
 @router.get("/peak-detection/config", response_model=PeakDetectionConfigResponse)
 async def get_peak_detection_config() -> PeakDetectionConfigResponse:
@@ -681,11 +815,11 @@ async def set_peak_detection_config(
     difference_threshold: Optional[float] = Form(None),
     min_region_length: Optional[int] = Form(None)
 ) -> PeakDetectionConfigResponse:
-    """设置波峰检测配置参数"""
+    """设置波峰检测配置参数并保存到JSON文件"""
     logger.info("🔧 Peak detection configuration update requested")
 
-    # 验证和更新配置参数
-    updated_fields = []
+    # 验证配置参数
+    updates = {}
 
     if threshold is not None:
         if not (50.0 <= threshold <= 255.0):
@@ -700,8 +834,7 @@ async def set_peak_detection_config(
                 )
             )
             return JSONResponse(status_code=400, content=error.model_dump(mode='json'))
-        settings.peak_threshold = threshold
-        updated_fields.append(f"threshold={threshold}")
+        updates["threshold"] = threshold
 
     if margin_frames is not None:
         if not (1 <= margin_frames <= 20):
@@ -716,8 +849,7 @@ async def set_peak_detection_config(
                 )
             )
             return JSONResponse(status_code=400, content=error.model_dump(mode='json'))
-        settings.peak_margin_frames = margin_frames
-        updated_fields.append(f"margin_frames={margin_frames}")
+        updates["margin_frames"] = margin_frames
 
     if difference_threshold is not None:
         if not (0.1 <= difference_threshold <= 10.0):
@@ -732,8 +864,7 @@ async def set_peak_detection_config(
                 )
             )
             return JSONResponse(status_code=400, content=error.model_dump(mode='json'))
-        settings.peak_difference_threshold = difference_threshold
-        updated_fields.append(f"difference_threshold={difference_threshold}")
+        updates["difference_threshold"] = difference_threshold
 
     if min_region_length is not None:
         if not (1 <= min_region_length <= 20):
@@ -748,22 +879,53 @@ async def set_peak_detection_config(
                 )
             )
             return JSONResponse(status_code=400, content=error.model_dump(mode='json'))
-        settings.peak_min_region_length = min_region_length
-        updated_fields.append(f"min_region_length={min_region_length}")
+        updates["min_region_length"] = min_region_length
 
-    # 如果有更新，重启处理器以应用新配置
-    if updated_fields and hasattr(processor, '_enhanced_detector'):
-        from ..core.enhanced_peak_detector import PeakDetectionConfig
-        new_config = PeakDetectionConfig(
-            threshold=settings.peak_threshold,
-            margin_frames=settings.peak_margin_frames,
-            difference_threshold=settings.peak_difference_threshold,
-            min_region_length=settings.peak_min_region_length
-        )
-        processor._enhanced_detector.update_config(new_config)
-        logger.info("🔧 Enhanced peak detector configuration updated: %s", ", ".join(updated_fields))
+    # 如果有更新，保存到JSON配置文件
+    if updates:
+        try:
+            from ..core.config_manager import get_config_manager
+            config_manager = get_config_manager()
 
-    fields_str = ", ".join(updated_fields) if updated_fields else "no changes"
+            success = config_manager.update_config(updates, section="peak_detection")
+            if not success:
+                raise HTTPException(status_code=500, detail="Failed to update peak detection configuration")
+
+            # 保存到文件
+            if not config_manager.save_config():
+                raise HTTPException(status_code=500, detail="Failed to save peak detection configuration")
+
+            logger.info("✅ Peak detection config saved to JSON file: %s", ", ".join(f"{k}={v}" for k, v in updates.items()))
+
+            # 更新运行时settings对象以保持兼容性
+            if "threshold" in updates:
+                settings.peak_threshold = updates["threshold"]
+            if "margin_frames" in updates:
+                settings.peak_margin_frames = updates["margin_frames"]
+            if "difference_threshold" in updates:
+                settings.peak_difference_threshold = updates["difference_threshold"]
+            if "min_region_length" in updates:
+                settings.peak_min_region_length = updates["min_region_length"]
+
+            # 更新处理器的配置
+            if hasattr(processor, '_enhanced_detector'):
+                from ..core.enhanced_peak_detector import PeakDetectionConfig
+                new_config = PeakDetectionConfig(
+                    threshold=settings.peak_threshold,
+                    margin_frames=settings.peak_margin_frames,
+                    difference_threshold=settings.peak_difference_threshold,
+                    min_region_length=settings.peak_min_region_length
+                )
+                processor._enhanced_detector.update_config(new_config)
+                logger.info("🔧 Enhanced peak detector configuration updated: %s", ", ".join(f"{k}={v}" for k, v in updates.items()))
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("Failed to save peak detection config to JSON: %s", str(e))
+            raise HTTPException(status_code=500, detail="FAILED_TO_SET_PEAK_DETECTION_CONFIG")
+
+    fields_str = ", ".join(f"{k}={v}" for k, v in updates.items()) if updates else "no changes"
     logger.info("✅ Peak detection configuration updated: %s", fields_str)
 
     return PeakDetectionConfigResponse(
@@ -1145,6 +1307,229 @@ async def waveform_with_peaks(
     except Exception as e:
         logger.error("Error generating waveform image: %s", str(e))
         raise HTTPException(status_code=500, detail=f"Failed to generate waveform image: {str(e)}")
+
+
+# ============================================================================
+# 统一配置管理API端点
+# ============================================================================
+
+@router.get("/config", summary="获取完整配置", response_model=dict)
+async def get_config(
+    section: Optional[str] = Query(None, description="配置节名称，如 'server', 'peak_detection' 等"),
+    password: str = Query(..., description="管理密码")
+):
+    """
+    获取配置信息
+
+    Args:
+        section: 可选的配置节名称，如果不提供则返回完整配置
+        password: 管理密码
+
+    Returns:
+        配置信息字典
+    """
+    if password != settings.password:
+        raise HTTPException(status_code=401, detail="密码错误")
+
+    try:
+        from ..core.config_manager import get_config_manager
+        config_manager = get_config_manager()
+
+        if section:
+            config = config_manager.get_config(section=section)
+            if config is None:
+                raise HTTPException(status_code=404, detail=f"配置节 '{section}' 不存在")
+            return {"section": section, "config": config}
+        else:
+            config = config_manager.get_full_config()
+            return {"config": config}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取配置失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取配置失败: {str(e)}")
+
+
+@router.post("/config", summary="更新配置")
+async def update_config(
+    section: Optional[str] = Query(None, description="配置节名称"),
+    key: Optional[str] = Query(None, description="配置键名称"),
+    value: Optional[str] = Query(None, description="配置值（JSON字符串）"),
+    config_data: Optional[str] = Query(None, description="完整配置数据（JSON字符串）"),
+    password: str = Query(..., description="管理密码")
+):
+    """
+    更新配置信息
+
+    Args:
+        section: 配置节名称（可选）
+        key: 配置键名称（可选）
+        value: 配置值，单个值更新时使用（JSON格式）
+        config_data: 完整配置数据，批量更新时使用
+        password: 管理密码
+
+    Returns:
+        更新结果
+    """
+    if password != settings.password:
+        raise HTTPException(status_code=401, detail="密码错误")
+
+    try:
+        from ..core.config_manager import get_config_manager
+        config_manager = get_config_manager()
+
+        success = False
+
+        if config_data is not None:
+            # 批量更新配置
+            try:
+                import json
+                parsed_config_data = json.loads(config_data) if isinstance(config_data, str) else config_data
+
+                if isinstance(parsed_config_data, dict):
+                    if section:
+                        # 更新指定配置节
+                        success = config_manager.update_config(parsed_config_data, section=section)
+                    else:
+                        # 更新多个配置节
+                        success = config_manager.update_config(parsed_config_data)
+                else:
+                    raise HTTPException(status_code=400, detail="config_data 必须为字典格式")
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="config_data JSON格式错误")
+        elif value is not None and section and key:
+            # 更新单个配置值
+            try:
+                # value可能是JSON字符串，需要解析
+                import json
+                parsed_value = json.loads(value) if isinstance(value, str) else value
+                success = config_manager.set_config(parsed_value, section=section, key=key)
+            except json.JSONDecodeError:
+                # 如果不是JSON，直接使用字符串值
+                success = config_manager.set_config(value, section=section, key=key)
+        else:
+            raise HTTPException(status_code=400, detail="请提供有效的更新参数")
+
+        if not success:
+            raise HTTPException(status_code=500, detail="配置更新失败")
+
+        # 保存配置到文件
+        if not config_manager.save_config():
+            raise HTTPException(status_code=500, detail="配置保存失败")
+
+        logger.info(f"配置已更新: section={section}, key={key}")
+        return {"success": True, "message": "配置更新成功"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"更新配置失败: {e}")
+        raise HTTPException(status_code=500, detail=f"更新配置失败: {str(e)}")
+
+
+@router.post("/config/reload", summary="重新加载配置")
+async def reload_config(
+    password: str = Query(..., description="管理密码")
+):
+    """
+    重新加载配置文件
+
+    Args:
+        password: 管理密码
+
+    Returns:
+        重新加载结果
+    """
+    if password != settings.password:
+        raise HTTPException(status_code=401, detail="密码错误")
+
+    try:
+        from ..core.config_manager import get_config_manager
+        config_manager = get_config_manager()
+
+        # 重新加载配置文件
+        if config_manager.reload_config():
+            logger.info("配置文件重新加载成功")
+            return {"success": True, "message": "配置文件重新加载成功"}
+        else:
+            raise HTTPException(status_code=500, detail="配置文件重新加载失败")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"重新加载配置失败: {e}")
+        raise HTTPException(status_code=500, detail=f"重新加载配置失败: {str(e)}")
+
+
+@router.get("/config/export", summary="导出配置")
+async def export_config(
+    password: str = Query(..., description="管理密码")
+):
+    """
+    导出配置为JSON格式
+
+    Args:
+        password: 管理密码
+
+    Returns:
+        JSON格式的配置字符串
+    """
+    if password != settings.password:
+        raise HTTPException(status_code=401, detail="密码错误")
+
+    try:
+        from ..core.config_manager import get_config_manager
+        config_manager = get_config_manager()
+
+        config_json = config_manager.export_config()
+
+        return JSONResponse(
+            content={
+                "success": True,
+                "config_json": config_json,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"导出配置失败: {e}")
+        raise HTTPException(status_code=500, detail=f"导出配置失败: {str(e)}")
+
+
+@router.post("/config/import", summary="导入配置")
+async def import_config(
+    config_json: str = Form(..., description="JSON格式的配置字符串"),
+    password: str = Form(..., description="管理密码")
+):
+    """
+    从JSON字符串导入配置
+
+    Args:
+        config_json: JSON格式的配置字符串
+        password: 管理密码
+
+    Returns:
+        导入结果
+    """
+    if password != settings.password:
+        raise HTTPException(status_code=401, detail="密码错误")
+
+    try:
+        from ..core.config_manager import get_config_manager
+        config_manager = get_config_manager()
+
+        if config_manager.import_config(config_json):
+            logger.info("配置导入成功")
+            return {"success": True, "message": "配置导入成功"}
+        else:
+            raise HTTPException(status_code=400, detail="配置格式无效或验证失败")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"导入配置失败: {e}")
+        raise HTTPException(status_code=500, detail=f"导入配置失败: {str(e)}")
 
 
 app = create_app()

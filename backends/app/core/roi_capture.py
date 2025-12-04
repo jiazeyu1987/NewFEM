@@ -20,8 +20,9 @@ class RoiCaptureService:
 
     def __init__(self):
         self._logger = logging.getLogger(self.__class__.__name__)
-        # 从配置获取ROI帧率
+        # 从配置获取ROI帧率（配置现在会从JSON文件加载）
         from ..config import settings
+        self._settings = settings
         self._frame_rate = settings.roi_frame_rate
         self._cache_interval = settings.roi_update_interval  # 缓存间隔
 
@@ -29,6 +30,9 @@ class RoiCaptureService:
         self._last_capture_time = 0.0
         self._cached_roi_data: Optional[RoiData] = None
         self._last_roi_config: Optional[RoiConfig] = None
+
+        self._logger.info("ROI Capture Service initialized with JSON config: frame_rate=%d, update_interval=%.1f",
+                         self._frame_rate, self._cache_interval)
 
     def capture_screen(self) -> Optional[Image.Image]:
         """
@@ -200,6 +204,24 @@ class RoiCaptureService:
             self._cache_interval = 1.0 / frame_rate
             self._logger.info("ROI frame rate updated to %d FPS, cache interval: %.3f seconds",
                               frame_rate, self._cache_interval)
+
+            # 保存到JSON配置文件
+            try:
+                from .config_manager import get_config_manager
+                config_manager = get_config_manager()
+
+                # 更新ROI帧率配置
+                updates = {"frame_rate": frame_rate}
+                success = config_manager.update_config(updates, section="roi_capture")
+                if success:
+                    config_manager.save_config()
+                    self._logger.info("ROI frame rate %d saved to JSON configuration file", frame_rate)
+                else:
+                    self._logger.warning("Failed to save ROI frame rate to JSON configuration file")
+
+            except Exception as e:
+                self._logger.error("Error saving ROI frame rate to JSON: %s", str(e))
+
             return True
         else:
             self._logger.error("Invalid frame rate: %d (must be 1-60)", frame_rate)
@@ -256,6 +278,40 @@ class RoiCaptureService:
 
         except Exception as e:
             return False, f"Validation error: {str(e)}"
+
+    def reload_config(self) -> bool:
+        """
+        从JSON配置文件重新加载ROI配置
+
+        Returns:
+            bool: 重新加载是否成功
+        """
+        try:
+            # 重新加载settings对象（这会从JSON文件读取最新配置）
+            from ..config import AppConfig
+            new_settings = AppConfig.reload_from_json()
+
+            if new_settings:
+                # 更新本地配置
+                old_frame_rate = self._frame_rate
+                old_interval = self._cache_interval
+
+                self._settings = new_settings
+                self._frame_rate = new_settings.roi_frame_rate
+                self._cache_interval = new_settings.roi_update_interval
+
+                self._logger.info(
+                    "ROI config reloaded from JSON: frame_rate %d->%d, interval %.1f->%.1f",
+                    old_frame_rate, self._frame_rate, old_interval, self._cache_interval
+                )
+                return True
+            else:
+                self._logger.error("Failed to reload ROI config from JSON")
+                return False
+
+        except Exception as e:
+            self._logger.error("Error reloading ROI config: %s", str(e))
+            return False
 
 
 # 单例ROI截图服务

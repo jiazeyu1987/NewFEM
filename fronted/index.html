@@ -424,6 +424,15 @@
                     <input type="range" id="capture-window-slider" min="50" max="200" step="10" value="100">
                 </div>
 
+                <!-- 数据生成频率设置 -->
+                <div class="range-slider-container">
+                    <div class="status-row">
+                        <span>数据频率</span>
+                        <span id="data-fps-display" class="status-value">60 FPS</span>
+                    </div>
+                    <input type="range" id="data-fps-slider" min="10" max="120" step="5" value="60">
+                </div>
+
                 <!-- 截取状态指示 -->
                 <div class="status-row">
                     <span>截取状态:</span>
@@ -740,6 +749,8 @@
             roiUpdateInterval: 500,  // ROI更新间隔（毫秒）
             lastRoiUpdate: 0,        // 上次ROI更新时间
             roiFrameRate: 2,         // ROI帧率（FPS）
+            // 数据生成频率控制
+            dataFps: 60,             // 数据生成频率（FPS）
             // 波峰检测配置
             peakConfig: {
                 threshold: 105.0,
@@ -850,6 +861,37 @@
                     return await response.json();
                 } catch(e) {
                     console.error("Set ROI frame rate error:", e);
+                    return { success: false, error: String(e) };
+                }
+            },
+
+            // 数据生成频率API
+            async getDataFps() {
+                try {
+                    const response = await fetch(`${appState.serverUrl}/data/fps`);
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return await response.json();
+                } catch(e) {
+                    console.error("Get data FPS error:", e);
+                    return { success: false, error: String(e) };
+                }
+            },
+
+            async setDataFps(fps) {
+                const formData = new URLSearchParams();
+                formData.append('fps', fps);
+                formData.append('password', '31415');
+
+                try {
+                    const response = await fetch(`${appState.serverUrl}/data/fps`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: formData
+                    });
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return await response.json();
+                } catch(e) {
+                    console.error("Set data FPS error:", e);
                     return { success: false, error: String(e) };
                 }
             },
@@ -2203,6 +2245,12 @@
                 // 加载波峰检测配置
                 await loadPeakDetectionConfig();
 
+                // 加载数据生成频率配置
+                await loadDataFps();
+
+                // 初始化数据显示
+                updateDataFpsDisplay();
+
                 // 启动动态轮询
                 updatePollingInterval();
             }, 1000);
@@ -2351,9 +2399,9 @@
                     console.warn('ROI帧率设置失败: ' + (frameRateResponse?.error || '未知错误'));
                 }
 
-                // 保存配置到localStorage (仅在ROI配置成功时保存)
+                // 配置已通过API保存到服务器JSON文件，无需保存到localStorage
                 if (roiResponse && roiResponse.success) {
-                    saveConfiguration();
+                    console.log('ROI配置已保存到服务器JSON文件');
                 }
 
                 updateUI();  // 更新UI状态
@@ -2363,7 +2411,24 @@
             }
         }
 
-        
+  
+        async function loadDataFps() {
+            try {
+                const response = await ApiService.getDataFps();
+                if (response && response.success) {
+                    appState.dataFps = response.fps;
+                    // 更新UI显示
+                    document.getElementById('data-fps-slider').value = response.fps;
+                    updateDataFpsDisplay();
+                    console.log('Data FPS loaded from server:', response.fps);
+                } else {
+                    console.warn('Failed to load data FPS from server, using default');
+                }
+            } catch (error) {
+                console.error('Load data FPS error:', error);
+            }
+        }
+
         async function loadRoiConfig() {
             try {
                 const response = await ApiService.getRoiConfig();
@@ -2537,16 +2602,27 @@
                     return;
                 }
 
-                // 只保存配置到localStorage
-                const config = {
-                    threshold: threshold,
-                    margin_frames: marginFrames,
-                    difference_threshold: differenceThreshold,
-                    min_region_length: minRegionLength
-                };
+                // 通过API保存配置到服务器JSON文件
+                const response = await ApiService.setPeakDetectionConfig(
+                    threshold,
+                    marginFrames,
+                    differenceThreshold,
+                    minRegionLength
+                );
 
-                savePeakDetectionConfigToLocalStorage(config);
-                console.log('波峰检测配置已保存到本地:', config);
+                if (response && response.success) {
+                    console.log('波峰检测配置已保存到服务器JSON文件:', response);
+                    // 更新本地状态
+                    appState.peakConfig = {
+                        threshold: threshold,
+                        margin_frames: marginFrames,
+                        difference_threshold: differenceThreshold,
+                        min_region_length: minRegionLength
+                    };
+                } else {
+                    alert('波峰检测配置应用失败: ' + (response?.error || '未知错误'));
+                    return;
+                }
 
             } catch (error) {
                 console.error('保存波峰检测配置失败:', error);
@@ -2621,6 +2697,38 @@
             }
         }
 
+        function updateDataFpsDisplay() {
+            const fps = parseInt(document.getElementById('data-fps-slider').value) || 60;
+            document.getElementById('data-fps-display').textContent = `${fps} FPS`;
+        }
+
+        async function applyDataFps() {
+            try {
+                const fps = parseInt(document.getElementById('data-fps-slider').value) || 60;
+
+                // 验证FPS范围
+                if (fps < 10 || fps > 120) {
+                    alert('数据频率无效：必须在10-120之间');
+                    return;
+                }
+
+                // 发送API请求
+                const response = await ApiService.setDataFps(fps);
+                if (response && response.success) {
+                    console.log('数据频率设置成功:', response.fps);
+                    // 更新应用状态
+                    appState.dataFps = fps;
+                    // 更新显示
+                    updateDataFpsDisplay();
+                } else {
+                    alert('数据频率设置失败: ' + (response.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Apply data FPS error:', error);
+                alert('数据频率设置失败: ' + error.message);
+            }
+        }
+
         /**
          * 6. 事件绑定
          */
@@ -2676,6 +2784,10 @@
                 console.log('ROI frame rate changed, auto-saving...');
                 saveConfiguration();
             });
+
+            // 数据生成频率控制
+            document.getElementById('data-fps-slider').addEventListener('input', updateDataFpsDisplay);
+            document.getElementById('data-fps-slider').addEventListener('change', applyDataFps);
 
             // 波峰检测配置控制
             document.getElementById('apply-peak-config-btn').addEventListener('click', applyPeakDetectionConfig);
