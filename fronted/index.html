@@ -438,6 +438,11 @@
                     📸 立即截取
                 </button>
 
+                <!-- 波峰颜色指示器 -->
+                <div id="peak-indicator" style="display: none; text-align: center; margin: 5px 0; font-size: 14px; font-weight: 600;">
+                    <span id="peak-indicator-text" style="padding: 3px 8px; border-radius: 3px;"></span>
+                </div>
+
                 <!-- 截取信息显示 -->
                 <div id="capture-info" style="display: none;">
                     <hr style="border: 1px solid var(--border-color); margin: 10px 0;">
@@ -1321,6 +1326,12 @@
                     if (data.peak_detection_results && !data.peak_detection_results.error) {
                         const results = data.peak_detection_results;
                         infoText += ` | 🎯波峰: ${results.total_peaks}个(🟢${results.green_peak_count} 🔴${results.red_peak_count})`;
+
+                        // 显示波峰颜色指示器
+                        this.updatePeakIndicator(results);
+                    } else {
+                        // 没有波峰检测结果时显示0
+                        this.updatePeakIndicator(null);
                     }
 
                     // 更新子波形信息，包含统计和波峰检测
@@ -1362,6 +1373,9 @@
 
                     // 更新子波形信息，包含统计
                     this.elements.info.textContent = `${data.series.length} 帧 | ${duration.toFixed(2)}s | 范围: ${minValue.toFixed(0)}-${maxValue.toFixed(0)}`;
+
+                    // 主信号数据没有波峰检测，显示0
+                    this.updatePeakIndicator(null);
 
                     console.log(`WaveformCapture: Displaying captured main signal data summary:`);
                     console.log(`  - Frames: ${data.series.length}`);
@@ -1439,6 +1453,66 @@
                 }
             }
 
+            updatePeakIndicator(peakResults) {
+                const indicatorElement = document.getElementById('peak-indicator');
+                const indicatorText = document.getElementById('peak-indicator-text');
+
+                if (!indicatorElement || !indicatorText) {
+                    return;
+                }
+
+                if (!peakResults || peakResults.error || peakResults.total_peaks === 0) {
+                    // 没有波峰或错误时显示0
+                    indicatorText.textContent = '0';
+                    indicatorText.style.backgroundColor = '#d32f2f'; // 红色
+                    indicatorText.style.color = 'white';
+                } else {
+                    // 检查距离截取点最近的波峰颜色
+                    // 截取点通常是数据的中间位置
+                    const capturePoint = Math.floor(this.captureSettings.windowSize / 2);
+
+                    let closestGreenDistance = Infinity;
+                    let closestRedDistance = Infinity;
+
+                    // 查找最近的绿色和红色波峰
+                    if (peakResults.green_peaks && peakResults.green_peaks.length > 0) {
+                        for (const [start, end] of peakResults.green_peaks) {
+                            const peakCenter = Math.floor((start + end) / 2);
+                            const distance = Math.abs(peakCenter - capturePoint);
+                            if (distance < closestGreenDistance) {
+                                closestGreenDistance = distance;
+                            }
+                        }
+                    }
+
+                    if (peakResults.red_peaks && peakResults.red_peaks.length > 0) {
+                        for (const [start, end] of peakResults.red_peaks) {
+                            const peakCenter = Math.floor((start + end) / 2);
+                            const distance = Math.abs(peakCenter - capturePoint);
+                            if (distance < closestRedDistance) {
+                                closestRedDistance = distance;
+                            }
+                        }
+                    }
+
+                    // 判断最近的波峰颜色
+                    if (closestGreenDistance < closestRedDistance) {
+                        // 最近的波峰是绿色，显示1
+                        indicatorText.textContent = '1';
+                        indicatorText.style.backgroundColor = '#4caf50'; // 绿色
+                        indicatorText.style.color = 'white';
+                    } else {
+                        // 最近的波峰是红色或没有波峰，显示0
+                        indicatorText.textContent = '0';
+                        indicatorText.style.backgroundColor = '#d32f2f'; // 红色
+                        indicatorText.style.color = 'white';
+                    }
+                }
+
+                // 显示指示器
+                indicatorElement.style.display = 'block';
+            }
+
                     }
 
         /**
@@ -1458,14 +1532,11 @@
                 this.showPoints = true;
                 this.baseline = 100;
                 this.isInitialized = false;
+                this.mouseEventsBound = false;
 
                 // 延迟初始化，等待容器显示
                 this.initWhenReady();
                 window.addEventListener('resize', () => this.resize());
-
-                // 鼠标交互
-                this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
-                this.canvas.addEventListener('mouseleave', () => { this.tooltip.style.display = 'none'; });
             }
 
             initWhenReady() {
@@ -1475,6 +1546,14 @@
                         // 容器已显示，进行初始化
                         this.resize();
                         this.isInitialized = true;
+
+                        // 绑定鼠标事件（只在容器显示后绑定一次）
+                        if (!this.mouseEventsBound) {
+                            this.bindMouseEvents();
+                            this.mouseEventsBound = true;
+                            console.log('SubWaveformChart mouse events bound successfully');
+                        }
+
                         console.log('SubWaveformChart initialized successfully');
                     } else {
                         // 容器未显示，继续等待
@@ -1482,6 +1561,15 @@
                     }
                 };
                 checkContainer();
+            }
+
+            bindMouseEvents() {
+                // 绑定鼠标交互事件
+                this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+                this.canvas.addEventListener('mouseleave', () => {
+                    this.updateStatusBar('Ready');
+                });
+                console.log('SubWaveformChart: mouse events bound');
             }
 
             resize() {
@@ -1748,22 +1836,47 @@
             }
 
             handleMouseMove(e) {
+                // 验证必要的属性
+                if (!this.canvas || !this.data || this.data.length === 0) {
+                    return;
+                }
+
                 const rect = this.canvas.getBoundingClientRect();
                 const mouseX = e.clientX - rect.left;
 
+                // 防止除零错误
+                if (this.data.length <= 1 || this.width <= 0) {
+                    this.updateStatusBar('');
+                    return;
+                }
+
                 const stepX = this.width / (this.data.length - 1);
-                const index = Math.round(mouseX / stepX);
+                const index = Math.floor(mouseX / stepX);
 
                 if (index >= 0 && index < this.data.length) {
                     const pt = this.data[index];
-                    this.tooltip.style.display = 'block';
-                    this.tooltip.style.left = (e.clientX + 10) + 'px';
-                    this.tooltip.style.top = (e.clientY + 10) + 'px';
-                    this.tooltip.innerHTML = `T: ${pt.t.toFixed(2)}s<br>Val: ${pt.value.toFixed(1)}`;
+                    const baselineDiff = pt.value - this.baseline;
+                    const relativePos = (index / (this.data.length - 1)) * 100;
+
+                    // 在底部状态栏显示数值信息
+                    const valueColor = pt.value > this.baseline ? '#4ec9b0' : '#f44747';
+                    const diffColor = baselineDiff > 0 ? '#4ec9b0' : '#f44747';
+
+                    const statusText = `截取波形 | 索引: ${index} | 时间: ${pt.t.toFixed(2)}s | 数值: ${pt.value.toFixed(1)} | 基线: ${this.baseline.toFixed(1)} | 差异: ${baselineDiff > 0 ? '+' : ''}${baselineDiff.toFixed(1)} | 位置: ${relativePos.toFixed(1)}%`;
+
+                    this.updateStatusBar(statusText);
                 } else {
-                    this.tooltip.style.display = 'none';
+                    this.updateStatusBar('');
                 }
             }
+
+            updateStatusBar(text) {
+                const chartStatusElement = document.getElementById('chart-status');
+                if (chartStatusElement) {
+                    chartStatusElement.textContent = text || 'Ready';
+                }
+        }
+
         }
 
         class RoiRenderer {

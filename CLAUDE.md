@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
+不要创建临时文件，测试文件，直接需改文件
 ## Project Overview
 
 NewFEM (New Focused Emboli Monitor) is a real-time HEM (High-Echoic Events) detection system that simulates a 60 FPS data generation system with peak detection capabilities. The system uses a modern web architecture with FastAPI backend and vanilla JavaScript frontend, communicating via RESTful APIs instead of WebSocket for better compatibility.

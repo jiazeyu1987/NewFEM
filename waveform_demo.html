@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NewFEM 波峰标注演示</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .demo-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .controls {
+            margin: 15px 0;
+        }
+        .control-group {
+            margin: 10px 0;
+            display: inline-block;
+            margin-right: 20px;
+        }
+        label {
+            display: inline-block;
+            width: 120px;
+            font-weight: bold;
+        }
+        input[type="number"], input[type="range"] {
+            width: 100px;
+            padding: 5px;
+        }
+        button {
+            background-color: #007cba;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #005a87;
+        }
+        .result-section {
+            margin-top: 20px;
+        }
+        .image-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .waveform-image {
+            max-width: 100%;
+            border: 2px solid #333;
+            border-radius: 4px;
+        }
+        .image-description {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            text-align: left;
+        }
+        .image-description ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .image-description li {
+            margin: 5px 0;
+        }
+        .metadata {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 15px;
+        }
+        .peak-info {
+            display: flex;
+            justify-content: space-around;
+            margin: 15px 0;
+        }
+        .peak-stat {
+            text-align: center;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .green-peaks {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .red-peaks {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .loading {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+        }
+        .error {
+            color: #dc3545;
+            background-color: #f8d7da;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NewFEM 波峰标注演示</h1>
+        <p>此演示展示了如何将 detect_peaks 函数返回的绿色和红色波峰标注在波形图像上。</p>
+
+        <div class="demo-section">
+            <h2>控制参数</h2>
+            <div class="controls">
+                <div class="control-group">
+                    <label for="dataPoints">数据点数:</label>
+                    <input type="number" id="dataPoints" value="100" min="10" max="500" step="10">
+                </div>
+                <div class="control-group">
+                    <label for="threshold">检测阈值:</label>
+                    <input type="number" id="threshold" value="105" min="50" max="255" step="1">
+                </div>
+                <div class="control-group">
+                    <label for="marginFrames">边界帧数:</label>
+                    <input type="number" id="marginFrames" value="5" min="1" max="20" step="1">
+                </div>
+                <div class="control-group">
+                    <label for="diffThreshold">差值阈值:</label>
+                    <input type="number" id="diffThreshold" value="2.1" min="0.1" max="10" step="0.1">
+                </div>
+            </div>
+            <button onclick="generateWaveform()">生成波形图像</button>
+            <button onclick="useRandomData()">使用随机数据</button>
+        </div>
+
+        <div class="result-section">
+            <div id="loadingIndicator" class="loading" style="display: none;">
+                正在生成波形图像，请稍候...
+            </div>
+            <div id="errorMessage" class="error" style="display: none;"></div>
+
+            <div id="peakInfo" class="peak-info" style="display: none;">
+                <div class="peak-stat green-peaks">
+                    <h3>绿色波峰</h3>
+                    <div id="greenPeakCount">0</div>
+                    <p>稳定HEM事件</p>
+                </div>
+                <div class="peak-stat red-peaks">
+                    <h3>红色波峰</h3>
+                    <div id="redPeakCount">0</div>
+                    <p>不稳定事件</p>
+                </div>
+            </div>
+
+            <div id="imageContainer" class="image-container" style="display: none;">
+                <h3>带波峰标注的波形图像</h3>
+                <img id="waveformImage" class="waveform-image" alt="Waveform with peak annotations">
+            </div>
+
+            <div id="metadata" class="metadata" style="display: none;">
+                <h3>生成信息</h3>
+                <div id="metadataContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SERVER_URL = 'http://localhost:8421';
+
+        function showLoading() {
+            document.getElementById('loadingIndicator').style.display = 'block';
+            document.getElementById('errorMessage').style.display = 'none';
+            document.getElementById('imageContainer').style.display = 'none';
+            document.getElementById('peakInfo').style.display = 'none';
+            document.getElementById('metadata').style.display = 'none';
+        }
+
+        function showError(message) {
+            document.getElementById('loadingIndicator').style.display = 'none';
+            document.getElementById('errorMessage').textContent = message;
+            document.getElementById('errorMessage').style.display = 'block';
+        }
+
+        function showResult(data) {
+            document.getElementById('loadingIndicator').style.display = 'none';
+            document.getElementById('errorMessage').style.display = 'none';
+
+            // 显示波峰统计
+            const greenCount = data.metadata.green_peaks;
+            const redCount = data.metadata.red_peaks;
+            document.getElementById('greenPeakCount').textContent = greenCount;
+            document.getElementById('redPeakCount').textContent = redCount;
+            document.getElementById('peakInfo').style.display = 'flex';
+
+            // 显示图像
+            document.getElementById('waveformImage').src = data.image_data;
+
+            // 更新图像说明
+            const imageContainer = document.getElementById('imageContainer');
+            imageContainer.querySelector('h3').textContent = '增强版波形图像 (包含时间轴)';
+            imageContainer.style.display = 'block';
+
+            // 显示元数据
+            const metadata = data.metadata;
+            const metadataHtml = `
+                <p><strong>数据点数:</strong> ${metadata.data_points}</p>
+                <p><strong>总波峰数:</strong> ${metadata.total_peaks}</p>
+                <p><strong>检测参数:</strong></p>
+                <ul>
+                    <li>阈值: ${metadata.detection_params.threshold}</li>
+                    <li>边界帧数: ${metadata.detection_params.margin_frames}</li>
+                    <li>差值阈值: ${metadata.detection_params.difference_threshold}</li>
+                </ul>
+                <p><strong>数据范围:</strong></p>
+                <ul>
+                    <li>最小值: ${metadata.data_range.min.toFixed(2)}</li>
+                    <li>最大值: ${metadata.data_range.max.toFixed(2)}</li>
+                    <li>平均值: ${metadata.data_range.avg.toFixed(2)}</li>
+                </ul>
+                <p><strong>生成时间:</strong> ${new Date(data.timestamp).toLocaleString()}</p>
+            `;
+            document.getElementById('metadataContent').innerHTML = metadataHtml;
+            document.getElementById('metadata').style.display = 'block';
+        }
+
+        async function generateWaveform() {
+            showLoading();
+
+            const params = new URLSearchParams({
+                count: document.getElementById('dataPoints').value,
+                threshold: document.getElementById('threshold').value,
+                margin_frames: document.getElementById('marginFrames').value,
+                difference_threshold: document.getElementById('diffThreshold').value
+            });
+
+            try {
+                const response = await fetch(`${SERVER_URL}/data/waveform-with-peaks?${params}`);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showResult(data);
+                } else {
+                    showError('生成波形图像失败: ' + (data.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Error generating waveform:', error);
+                showError('无法连接到服务器: ' + error.message);
+            }
+        }
+
+        function useRandomData() {
+            // 设置随机参数
+            document.getElementById('dataPoints').value = Math.floor(Math.random() * 150) + 50;
+            document.getElementById('threshold').value = Math.floor(Math.random() * 50) + 80;
+            document.getElementById('marginFrames').value = Math.floor(Math.random() * 10) + 2;
+            document.getElementById('diffThreshold').value = (Math.random() * 3 + 1).toFixed(1);
+
+            // 自动生成
+            generateWaveform();
+        }
+
+        // 页面加载时自动生成一次
+        window.addEventListener('load', () => {
+            setTimeout(generateWaveform, 500);
+        });
+    </script>
+</body>
+</html>

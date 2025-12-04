@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SubWaveformChart Tooltip Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 800px;
+        }
+        .subwaveform-container {
+            margin-top: 20px;
+            padding: 10px;
+            border: 2px solid #ccc;
+            border-radius: 4px;
+        }
+        #subwaveform-tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 1000;
+            display: none;
+            white-space: nowrap;
+        }
+        canvas {
+            border: 1px solid #ddd;
+            background: white;
+            display: block;
+        }
+        .test-button {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        .test-button:hover {
+            background: #005a9e;
+        }
+        .info {
+            background: #e8f4f8;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>SubWaveformChart 工具提示测试</h1>
+
+        <div class="info">
+            <h3>测试说明:</h3>
+            <p>这个页面用于测试截取波形的工具提示功能。点击下面的按钮生成测试数据，然后将鼠标移动到波形上查看工具提示。</p>
+        </div>
+
+        <button class="test-button" onclick="testWithSmallData()">测试小数据集 (5个点)</button>
+        <button class="test-button" onclick="testWithMediumData()">测试中等数据集 (20个点)</button>
+        <button class="test-button" onclick="testWithLargeData()">测试大数据集 (100个点)</button>
+        <button class="test-button" onclick="clearChart()">清除图表</button>
+
+        <div class="subwaveform-container">
+            <canvas id="subwaveform-chart"></canvas>
+            <div id="subwaveform-tooltip"></div>
+        </div>
+    </div>
+
+    <script>
+        // 简化的SubWaveformChart类用于测试
+        class SubWaveformChart {
+            constructor(canvasId) {
+                this.canvas = document.getElementById(canvasId);
+                this.ctx = this.canvas.getContext('2d', { alpha: false });
+                this.tooltip = document.getElementById('subwaveform-tooltip');
+
+                this.data = [];
+                this.zoom = 1.0;
+                this.showGrid = true;
+                this.showBaseline = true;
+                this.showPoints = true;
+                this.baseline = 100;
+                this.isInitialized = false;
+                this.mouseEventsBound = false;
+
+                // 初始化
+                this.resize();
+                this.bindMouseEvents();
+                this.isInitialized = true;
+                this.mouseEventsBound = true;
+                console.log('SubWaveformChart initialized for testing');
+            }
+
+            bindMouseEvents() {
+                this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+                this.canvas.addEventListener('mouseleave', () => {
+                    this.tooltip.style.display = 'none';
+                });
+                console.log('SubWaveformChart: mouse events bound');
+            }
+
+            resize() {
+                const rect = this.canvas.parentElement.getBoundingClientRect();
+                const dpr = window.devicePixelRatio || 1;
+
+                this.canvas.width = rect.width * dpr;
+                this.canvas.height = rect.height * dpr;
+                this.ctx.scale(dpr, dpr);
+                this.canvas.style.width = `${rect.width}px`;
+                this.canvas.style.height = `${rect.height}px`;
+                this.width = rect.width;
+                this.height = rect.height;
+
+                console.log('SubWaveformChart resized to', rect.width, 'x', rect.height);
+                this.draw();
+            }
+
+            setData(series) {
+                if (!series || !Array.isArray(series) || series.length === 0) {
+                    console.error('SubWaveformChart: Invalid data provided', series);
+                    return;
+                }
+
+                const isValidData = series.every(pt =>
+                    pt && typeof pt === 'object' &&
+                    typeof pt.t === 'number' &&
+                    typeof pt.value === 'number'
+                );
+
+                if (!isValidData) {
+                    console.error('SubWaveformChart: Invalid data format', series);
+                    return;
+                }
+
+                this.data = series;
+
+                const values = series.map(pt => pt.value);
+                const minValue = Math.min(...values);
+                const maxValue = Math.max(...values);
+                this.baseline = (minValue + maxValue) / 2; // 动态计算基线
+
+                console.log('SubWaveformChart: Data set with', series.length, 'points');
+                console.log('  - Value range:', minValue.toFixed(2), '-', maxValue.toFixed(2));
+                console.log('  - Baseline:', this.baseline.toFixed(2));
+
+                this.draw();
+            }
+
+            draw() {
+                if (!this.ctx) {
+                    console.error('SubWaveformChart: Canvas context not available');
+                    return;
+                }
+
+                if (!this.isInitialized || this.data.length === 0) {
+                    this.ctx.fillStyle = '#ffffff';
+                    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                    return;
+                }
+
+                const ctx = this.ctx;
+
+                // 清空画布
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, this.width, this.height);
+
+                // 绘制网格
+                if (this.showGrid) {
+                    this.drawGrid();
+                }
+
+                // 绘制基线
+                if (this.showBaseline) {
+                    this.drawBaseline();
+                }
+
+                // 绘制波形
+                this.drawWaveform();
+
+                console.log('SubWaveformChart: Drawn', this.data.length, 'data points');
+            }
+
+            drawGrid() {
+                const ctx = this.ctx;
+                ctx.strokeStyle = '#e0e0e0';
+                ctx.lineWidth = 0.5;
+
+                // 水平网格线
+                for (let i = 0; i <= 4; i++) {
+                    const y = (this.height / 5) * (i + 1);
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(this.width, y);
+                    ctx.stroke();
+                }
+
+                // 垂直网格线
+                for (let i = 0; i <= 10; i++) {
+                    const x = (this.width / 10) * i;
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, this.height);
+                    ctx.stroke();
+                }
+            }
+
+            drawBaseline() {
+                const ctx = this.ctx;
+                const minVal = Math.min(...this.data.map(pt => pt.value));
+                const maxVal = Math.max(...this.data.map(pt => pt.value));
+                const range = maxVal - minVal || 1;
+                const baselineY = this.height - ((this.baseline - minVal) / range) * this.height;
+
+                ctx.strokeStyle = '#ffa500';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(0, baselineY);
+                ctx.lineTo(this.width, baselineY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            drawWaveform() {
+                if (this.data.length === 0) return;
+
+                const ctx = this.ctx;
+                const minVal = Math.min(...this.data.map(pt => pt.value));
+                const maxVal = Math.max(...this.data.map(pt => pt.value));
+                const range = maxVal - minVal || 1;
+
+                // 绘制连线
+                ctx.strokeStyle = '#2196F3';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+
+                for (let i = 0; i < this.data.length; i++) {
+                    const x = (this.width / (this.data.length - 1)) * i;
+                    const y = this.height - ((this.data[i].value - minVal) / range) * this.height;
+
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+
+                // 绘制数据点
+                if (this.showPoints) {
+                    ctx.fillStyle = '#FF5722';
+                    for (let i = 0; i < this.data.length; i++) {
+                        const x = (this.width / (this.data.length - 1)) * i;
+                        const y = this.height - ((this.data[i].value - minVal) / range) * this.height;
+
+                        ctx.beginPath();
+                        ctx.arc(x, y, 3, 0, 2 * Math.PI);
+                        ctx.fill();
+                    }
+                }
+            }
+
+            handleMouseMove(e) {
+                if (!this.canvas || !this.data || this.data.length === 0) {
+                    return;
+                }
+
+                const rect = this.canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+
+                if (this.data.length <= 1 || this.width <= 0) {
+                    console.warn('SubWaveformChart: Invalid data or canvas dimensions for tooltip calculation');
+                    return;
+                }
+
+                const stepX = this.width / (this.data.length - 1);
+                const index = Math.floor(mouseX / stepX);
+
+                if (index >= 0 && index < this.data.length) {
+                    const pt = this.data[index];
+                    const baselineDiff = pt.value - this.baseline;
+                    const relativePos = (index / (this.data.length - 1)) * 100;
+
+                    // 防止工具提示超出屏幕
+                    const tooltipWidth = 200;
+                    const tooltipHeight = 80;
+                    let tooltipLeft = e.clientX + 10;
+                    let tooltipTop = e.clientY + 10;
+
+                    if (tooltipLeft + tooltipWidth > window.innerWidth) {
+                        tooltipLeft = e.clientX - tooltipWidth - 10;
+                    }
+                    if (tooltipTop + tooltipHeight > window.innerHeight) {
+                        tooltipTop = e.clientY - tooltipHeight - 10;
+                    }
+
+                    this.tooltip.style.display = 'block';
+                    this.tooltip.style.left = tooltipLeft + 'px';
+                    this.tooltip.style.top = tooltipTop + 'px';
+
+                    console.log(`SubWaveformChart: Showing tooltip for index ${index}, value ${pt.value.toFixed(2)}`);
+
+                    this.tooltip.innerHTML = `
+                        <div style="font-family: monospace; font-size: 12px;">
+                            <div><strong>Index:</strong> ${index}</div>
+                            <div><strong>Time:</strong> ${pt.t.toFixed(2)}s</div>
+                            <div><strong>Value:</strong> <span style="color: ${pt.value > this.baseline ? '#4ec9b0' : '#f44747'}">${pt.value.toFixed(1)}</span></div>
+                            <div><strong>Baseline:</strong> ${this.baseline.toFixed(1)}</div>
+                            <div><strong>Diff:</strong> <span style="color: ${baselineDiff > 0 ? '#4ec9b0' : '#f44747'}">${baselineDiff > 0 ? '+' : ''}${baselineDiff.toFixed(1)}</span></div>
+                            <div><strong>Position:</strong> ${relativePos.toFixed(1)}%</div>
+                        </div>
+                    `;
+                } else {
+                    this.tooltip.style.display = 'none';
+                }
+            }
+        }
+
+        // 测试函数
+        function generateTestData(count) {
+            const data = [];
+            const baseline = 100;
+
+            for (let i = 0; i < count; i++) {
+                const value = baseline + Math.sin(i * 0.2) * 30 + Math.random() * 10 - 5;
+                data.push({
+                    t: i * 0.1, // 0.1秒间隔
+                    value: value
+                });
+            }
+            return data;
+        }
+
+        function testWithSmallData() {
+            const chart = new SubWaveformChart('subwaveform-chart');
+            const data = generateTestData(5);
+            chart.setData(data);
+            console.log('测试小数据集完成:', data);
+        }
+
+        function testWithMediumData() {
+            const chart = new SubWaveformChart('subwaveform-chart');
+            const data = generateTestData(20);
+            chart.setData(data);
+            console.log('测试中等数据集完成:', data);
+        }
+
+        function testWithLargeData() {
+            const chart = new SubWaveformChart('subwaveform-chart');
+            const data = generateTestData(100);
+            chart.setData(data);
+            console.log('测试大数据集完成:', data);
+        }
+
+        function clearChart() {
+            const chart = new SubWaveformChart('subwaveform-chart');
+            chart.setData([]);
+            console.log('图表已清除');
+        }
+    </script>
+</body>
+</html>

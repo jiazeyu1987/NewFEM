@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuration Persistence Test</title>
+</head>
+<body>
+    <h1>NewFEM 配置持久化测试</h1>
+
+    <h2>ROI 配置</h2>
+    <label>X1: <input type="number" id="roi-x1" value="0"></label><br>
+    <label>Y1: <input type="number" id="roi-y1" value="0"></label><br>
+    <label>X2: <input type="number" id="roi-x2" value="200"></label><br>
+    <label>Y2: <input type="number" id="roi-y2" value="150"></label><br>
+    <label>Frame Rate: <input type="number" id="roi-frame-rate" value="2"></label><br>
+
+    <h2>波峰检测配置</h2>
+    <label>Threshold: <input type="number" id="peak-threshold" value="105" step="0.1"></label><br>
+    <label>Margin Frames: <input type="number" id="peak-margin-frames" value="5"></label><br>
+    <label>Difference Threshold: <input type="number" id="peak-difference-threshold" value="2.1" step="0.1"></label><br>
+    <label>Min Region Length: <input type="number" id="peak-min-region-length" value="3"></label><br>
+
+    <h2>操作</h2>
+    <button onclick="saveConfiguration()">保存配置</button>
+    <button onclick="clearConfiguration()">清除配置</button>
+    <button onclick="loadConfiguration()">加载配置</button>
+    <button onclick="testAutoApply()">测试自动应用</button>
+
+    <h2>状态</h2>
+    <div id="status"></div>
+
+    <script>
+        // 从NewFEM前端复制的关键函数
+        function saveConfiguration() {
+            // 保存ROI配置
+            const roiConfig = {
+                x1: parseInt(document.getElementById('roi-x1').value) || 0,
+                y1: parseInt(document.getElementById('roi-y1').value) || 0,
+                x2: parseInt(document.getElementById('roi-x2').value) || 0,
+                y2: parseInt(document.getElementById('roi-y2').value) || 0,
+                frameRate: parseInt(document.getElementById('roi-frame-rate').value) || 2,
+                lastUpdated: new Date().toISOString()
+            };
+            localStorage.setItem('newfem_roi_config', JSON.stringify(roiConfig));
+
+            // 保存波峰检测配置
+            const peakConfig = {
+                threshold: parseFloat(document.getElementById('peak-threshold').value) || 105.0,
+                margin_frames: parseInt(document.getElementById('peak-margin-frames').value) || 5,
+                difference_threshold: parseFloat(document.getElementById('peak-difference-threshold').value) || 2.1,
+                min_region_length: parseInt(document.getElementById('peak-min-region-length').value) || 3
+            };
+            localStorage.setItem('newfem_peak_detection_config', JSON.stringify(peakConfig));
+
+            updateStatus('配置已保存到localStorage');
+        }
+
+        function clearConfiguration() {
+            localStorage.removeItem('newfem_roi_config');
+            localStorage.removeItem('newfem_peak_detection_config');
+            updateStatus('配置已清除');
+        }
+
+        function loadConfiguration() {
+            // 加载ROI配置
+            const roiConfig = localStorage.getItem('newfem_roi_config');
+            if (roiConfig) {
+                try {
+                    const config = JSON.parse(roiConfig);
+                    document.getElementById('roi-x1').value = config.x1;
+                    document.getElementById('roi-y1').value = config.y1;
+                    document.getElementById('roi-x2').value = config.x2;
+                    document.getElementById('roi-y2').value = config.y2;
+                    document.getElementById('roi-frame-rate').value = config.frameRate;
+                    updateStatus('ROI配置已加载');
+                } catch (e) {
+                    updateStatus('ROI配置加载失败: ' + e.message);
+                }
+            }
+
+            // 加载波峰检测配置
+            const peakConfig = localStorage.getItem('newfem_peak_detection_config');
+            if (peakConfig) {
+                try {
+                    const config = JSON.parse(peakConfig);
+                    document.getElementById('peak-threshold').value = config.threshold;
+                    document.getElementById('peak-margin-frames').value = config.margin_frames;
+                    document.getElementById('peak-difference-threshold').value = config.difference_threshold;
+                    document.getElementById('peak-min-region-length').value = config.min_region_length;
+                    updateStatus('波峰检测配置已加载');
+                } catch (e) {
+                    updateStatus('波峰检测配置加载失败: ' + e.message);
+                }
+            }
+
+            if (!roiConfig && !peakConfig) {
+                updateStatus('没有找到保存的配置');
+            }
+        }
+
+        function testAutoApply() {
+            const hasRoiConfig = localStorage.getItem('newfem_roi_config');
+            const hasPeakConfig = localStorage.getItem('newfem_peak_detection_config');
+
+            if (hasRoiConfig || hasPeakConfig) {
+                loadConfiguration();
+
+                setTimeout(() => {
+                    const roiX1 = parseInt(document.getElementById('roi-x1').value);
+                    const roiY1 = parseInt(document.getElementById('roi-y1').value);
+                    const threshold = parseFloat(document.getElementById('peak-threshold').value);
+
+                    if (roiX1 > 0 || roiY1 > 0 || threshold > 0) {
+                        updateStatus('自动应用测试成功 - 配置已加载并准备应用');
+                    }
+                }, 1000);
+            } else {
+                updateStatus('没有保存的配置可供测试');
+            }
+        }
+
+        function updateStatus(message) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML += '<p>' + new Date().toLocaleTimeString() + ': ' + message + '</p>';
+        }
+
+        // 页面加载时检查是否有保存的配置
+        window.addEventListener('load', () => {
+            const hasRoiConfig = localStorage.getItem('newfem_roi_config');
+            const hasPeakConfig = localStorage.getItem('newfem_peak_detection_config');
+
+            if (hasRoiConfig || hasPeakConfig) {
+                updateStatus('发现保存的配置，将在2秒后自动加载...');
+                setTimeout(() => {
+                    loadConfiguration();
+                }, 2000);
+            } else {
+                updateStatus('没有发现保存的配置');
+            }
+        });
+    </script>
+</body>
+</html>
