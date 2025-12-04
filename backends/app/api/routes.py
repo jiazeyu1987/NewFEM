@@ -1351,7 +1351,7 @@ async def get_config(
         raise HTTPException(status_code=500, detail=f"获取配置失败: {str(e)}")
 
 
-@router.post("/config", summary="更新配置")
+@router.post("/config", summary="Update Configuration")
 async def update_config(
     section: Optional[str] = Query(None, description="配置节名称"),
     key: Optional[str] = Query(None, description="配置键名称"),
@@ -1428,7 +1428,7 @@ async def update_config(
         raise HTTPException(status_code=500, detail=f"更新配置失败: {str(e)}")
 
 
-@router.post("/config/reload", summary="重新加载配置")
+@router.post("/config/reload", summary="Reload Configuration")
 async def reload_config(
     password: str = Query(..., description="管理密码")
 ):
@@ -1497,7 +1497,7 @@ async def export_config(
         raise HTTPException(status_code=500, detail=f"导出配置失败: {str(e)}")
 
 
-@router.post("/config/import", summary="导入配置")
+@router.post("/config/import", summary="Import Configuration")
 async def import_config(
     config_json: str = Form(..., description="JSON格式的配置字符串"),
     password: str = Form(..., description="管理密码")
