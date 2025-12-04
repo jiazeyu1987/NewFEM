@@ -15,13 +15,13 @@
     "max_frame_count": 10000
   },
   "roi_capture": {
-    "frame_rate": 15,
+    "frame_rate": 2,
     "update_interval": 0.5,
     "default_config": {
-      "x1": 1480,
-      "y1": 480,
-      "x2": 1580,
-      "y2": 580
+      "x1": 0,
+      "y1": 0,
+      "x2": 200,
+      "y2": 150
     }
   },
   "peak_detection": {
