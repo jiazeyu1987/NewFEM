@@ -265,8 +265,100 @@
             border-bottom: 1px solid var(--border-color);
             display: flex;
             align-items: center;
+            justify-content: space-between;
             padding: 0 16px;
             background-color: var(--bg-color);
+        }
+
+        .toolbar-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: auto;
+        }
+
+        .ui-toggle-btn {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 6px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            min-width: 60px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .ui-toggle-btn:hover {
+            background: #4a9eff;
+            transform: translateY(-1px);
+        }
+
+        .ui-toggle-btn:active {
+            transform: translateY(0);
+        }
+
+        /* UI模式切换样式 */
+        body.expanded-mode .hide-in-compact {
+            display: block !important;
+        }
+
+        body.compact-mode {
+            background-color: var(--vscode-editor-background);
+        }
+
+        body.compact-mode .hide-in-compact {
+            display: none !important;
+            opacity: 0;
+            height: 0;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* 简化模式下的布局调整 */
+        body.compact-mode .sidebar {
+            width: 200px;
+            transition: width 0.3s ease;
+        }
+
+        body.compact-mode .main-content {
+            margin-left: 200px;
+            transition: margin-left 0.3s ease;
+        }
+
+        body.expanded-mode .sidebar {
+            width: 280px;
+            transition: width 0.3s ease;
+        }
+
+        body.expanded-mode .main-content {
+            margin-left: 280px;
+            transition: margin-left 0.3s ease;
+        }
+
+        /* 平滑过渡效果 */
+        .hide-in-compact {
+            transition: opacity 0.3s ease, max-height 0.3s ease, margin 0.3s ease, padding 0.3s ease;
+        }
+
+        .essential-panel {
+            transition: all 0.3s ease;
+        }
+
+        .essential-btn {
+            transition: all 0.2s ease;
+        }
+
+        /* 保存用户偏好 */
+        .ui-preference-storage {
+            display: none;
         }
 
         .chart-container {
@@ -342,16 +434,7 @@
             z-index: 100;
         }
 
-        /* Signal indicators */
-        .signal-indicator {
-            padding: 2px 6px;
-            border-radius: 2px;
-            font-weight: bold;
-        }
-        .signal-green { color: var(--success-color); background: rgba(78, 201, 176, 0.1); }
-        .signal-red { color: var(--error-color); background: rgba(244, 135, 113, 0.1); }
-        .signal-none { color: #666; }
-
+        
         /* ROI 输入框样式 */
         .roi-input {
             background-color: var(--input-bg);
@@ -387,12 +470,12 @@
                     <span id="detection-state" style="color:var(--accent-color); font-weight:bold;">IDLE</span>
                 </div>
                 <div class="control-group">
-                    <button id="start-btn">开始检测</button>
-                    <button id="stop-btn" class="danger" disabled>停止</button>
-                    <button id="pause-btn" disabled>暂停</button>
-                    <button id="resume-btn" disabled>恢复</button>
+                    <button id="start-btn" class="essential-btn">开始检测</button>
+                    <button id="stop-btn" class="danger essential-btn" disabled>停止</button>
+                    <button id="pause-btn" class="hide-in-compact" disabled>暂停</button>
+                    <button id="resume-btn" class="hide-in-compact" disabled>恢复</button>
                 </div>
-                <button id="refresh-status-btn" style="width: 100%; margin-top: 5px;">刷新系统状态</button>
+                <button id="refresh-status-btn" class="hide-in-compact" style="width: 100%; margin-top: 5px;">刷新系统状态</button>
             </div>
         </div>
 
@@ -401,7 +484,7 @@
             <div class="panel-header">波形截取</div>
             <div class="panel-content">
                 <!-- 数据源选择 -->
-                <div class="status-row">
+                <div class="status-row hide-in-compact">
                     <span>数据源:</span>
                     <div>
                         <label style="display: flex; align-items: center; gap: 8px;">
@@ -416,7 +499,7 @@
                 </div>
 
                 <!-- 截取窗口大小设置 -->
-                <div class="range-slider-container">
+                <div class="range-slider-container hide-in-compact">
                     <div class="status-row">
                         <span>窗口大小</span>
                         <span id="capture-window-size" class="status-value">100 帧</span>
@@ -425,7 +508,7 @@
                 </div>
 
                 <!-- 数据生成频率设置 -->
-                <div class="range-slider-container">
+                <div class="range-slider-container hide-in-compact">
                     <div class="status-row">
                         <span>数据频率</span>
                         <span id="data-fps-display" class="status-value">60 FPS</span>
@@ -434,7 +517,7 @@
                 </div>
 
                 <!-- 截取状态指示 -->
-                <div class="status-row">
+                <div class="status-row hide-in-compact">
                     <span>截取状态:</span>
                     <div>
                         <span id="capture-status-indicator" class="indicator disconnected"></span>
@@ -443,7 +526,7 @@
                 </div>
 
                 <!-- 截取按钮 -->
-                <button id="capture-btn" style="width: 100%; height: 35px; font-size: 14px; font-weight: 600; margin: 10px 0;">
+                <button id="capture-btn" class="essential-btn" style="width: 100%; height: 35px; font-size: 14px; font-weight: 600; margin: 10px 0;">
                     📸 立即截取
                 </button>
 
@@ -476,7 +559,7 @@
         </div>
 
         <!-- 3.3 ROI 图像显示 -->
-        <div class="panel">
+        <div class="panel essential-panel">
             <div class="panel-header">ROI 监控</div>
             <div class="panel-content" style="align-items: center;">
                 <canvas id="roi-canvas" width="200" height="150"></canvas>
@@ -488,7 +571,7 @@
         </div>
 
         <!-- 3.4 ROI 设置面板 -->
-        <div class="panel">
+        <div class="panel hide-in-compact">
             <div class="panel-header">ROI 设置</div>
             <div class="panel-content">
                 <!-- ROI配置状态指示 -->
@@ -541,7 +624,7 @@
 
         
         <!-- 3.6 波峰检测配置面板 -->
-        <div class="panel">
+        <div class="panel hide-in-compact">
             <div class="panel-header">波峰检测设置</div>
             <div class="panel-content">
                 <!-- 绝对阈值 -->
@@ -631,11 +714,7 @@
                     <span>基线值</span>
                     <span id="baseline-value" class="status-value">0.00</span>
                 </div>
-                <div class="status-row">
-                    <span>波峰信号</span>
-                    <span id="peak-signal" class="status-value signal-none">NULL</span>
-                </div>
-                 <div class="status-row">
+                   <div class="status-row">
                     <span>缓冲区</span>
                     <span id="buffer-size" class="status-value">0</span>
                 </div>
@@ -674,7 +753,12 @@
     <!-- MAIN CONTENT -->
     <div class="main-content">
         <div class="chart-toolbar">
-            <span style="font-weight: 600; font-size: 12px;">实时灰度波形图 (Real-time Waveform)</span>
+            <span class="toolbar-title hide-in-compact" style="font-weight: 600; font-size: 12px;">实时灰度波形图 (Real-time Waveform)</span>
+            <div class="toolbar-controls">
+                <button id="ui-toggle-btn" class="ui-toggle-btn essential-btn" title="切换UI模式">
+                    <span id="ui-toggle-text">缩小</span>
+                </button>
+            </div>
         </div>
         
         <div class="chart-container" id="chart-container">
@@ -716,8 +800,7 @@
             roiData: null,
             frameCount: 0,
             currentValue: 0,
-            peakSignal: null,      // 1 (Green), 0 (Red), null
-            baseline: 120,
+              baseline: 120,
             updateRate: 20,
             detectionState: 'IDLE', // IDLE, RUNNING, PAUSED, STOPPED
             chartState: {
@@ -757,7 +840,9 @@
             pollingIntervals: {
                 realtime: null,
                 status: null
-            }
+            },
+            // UI模式控制
+            uiMode: 'expanded' // 'expanded' 或 'compact'
         };
 
   
@@ -2043,19 +2128,7 @@
             document.getElementById('baseline-value').innerText = appState.baseline.toFixed(2);
             document.getElementById('buffer-size').innerText = appState.chartData.length;
             
-            // 波峰信号
-            const peakEl = document.getElementById('peak-signal');
-            if (appState.peakSignal === 1) {
-                peakEl.className = 'status-value signal-green';
-                peakEl.innerText = 'DETECTED';
-            } else if (appState.peakSignal === 0) {
-                peakEl.className = 'status-value signal-red';
-                peakEl.innerText = 'WEAK';
-            } else {
-                peakEl.className = 'status-value signal-none';
-                peakEl.innerText = 'NULL';
-            }
-
+  
             // ROI配置状态
             const roiStatusIndicator = document.getElementById('roi-status-indicator');
             const roiStatusText = document.getElementById('roi-status-text');
@@ -2142,9 +2215,8 @@
 
             const data = await ApiService.fetchRealtimeData();
             if (data && data.type === 'realtime_data') {
-                // 更新全局数据
+              // 更新全局数据
                 appState.frameCount = data.frame_count;
-                appState.peakSignal = data.peak_signal;
                 appState.baseline = data.baseline;
 
                 // 控制ROI更新频率 - 降低到2 FPS，减少闪烁
@@ -2783,6 +2855,65 @@
 
             // 添加波峰检测配置实时同步和自动保存
             const peakInputs = ['peak-threshold', 'peak-margin-frames', 'peak-difference-threshold', 'peak-min-region-length'];
+
+            // UI模式切换功能
+            function toggleUIMode() {
+                const newMode = appState.uiMode === 'expanded' ? 'compact' : 'expanded';
+                appState.uiMode = newMode;
+
+                // 更新body类名以触发CSS样式变化
+                document.body.classList.toggle('compact-mode', newMode === 'compact');
+                document.body.classList.toggle('expanded-mode', newMode === 'expanded');
+
+                // 更新按钮文本
+                const uiToggleText = document.getElementById('ui-toggle-text');
+                if (uiToggleText) {
+                    uiToggleText.textContent = newMode === 'compact' ? '放大' : '缩小';
+                }
+
+                // 保存用户偏好到localStorage
+                try {
+                    localStorage.setItem('newfem-ui-mode', newMode);
+                } catch (e) {
+                    console.warn('无法保存UI模式偏好到localStorage:', e);
+                }
+
+                console.log(`UI模式切换为: ${newMode}`);
+            }
+
+            // 从localStorage恢复UI模式偏好
+            function restoreUIMode() {
+                try {
+                    const savedMode = localStorage.getItem('newfem-ui-mode');
+                    if (savedMode === 'compact' || savedMode === 'expanded') {
+                        appState.uiMode = savedMode;
+                        document.body.classList.toggle('compact-mode', savedMode === 'compact');
+                        document.body.classList.toggle('expanded-mode', savedMode === 'expanded');
+
+                        // 更新按钮文本
+                        const uiToggleText = document.getElementById('ui-toggle-text');
+                        if (uiToggleText) {
+                            uiToggleText.textContent = savedMode === 'compact' ? '放大' : '缩小';
+                        }
+
+                        console.log(`恢复UI模式偏好: ${savedMode}`);
+                    }
+                } catch (e) {
+                    console.warn('无法从localStorage恢复UI模式偏好:', e);
+                }
+            }
+
+            // 添加UI切换按钮事件监听器
+            const uiToggleBtn = document.getElementById('ui-toggle-btn');
+            if (uiToggleBtn) {
+                uiToggleBtn.addEventListener('click', toggleUIMode);
+                console.log('UI切换按钮事件监听器已添加');
+            } else {
+                console.error('未找到UI切换按钮元素');
+            }
+
+            // 恢复UI模式偏好
+            restoreUIMode();
 
             // 防抖函数，避免频繁API调用
             function debounce(func, wait) {

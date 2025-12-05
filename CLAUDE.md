@@ -4,13 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 不要创建临时文件，测试文件，直接需改文件
 ## Project Overview
 
-NewFEM (New Focused Emboli Monitor) is a real-time HEM (High-Echoic Events) detection system that simulates a 60 FPS data generation system with peak detection capabilities. The system uses a modern web architecture with FastAPI backend and vanilla JavaScript frontend, communicating via RESTful APIs instead of WebSocket for better compatibility.
+NewFEM (New Focused Emboli Monitor) is a real-time HEM (High-Echoic Events) detection system that simulates a 60 FPS data generation system with peak detection capabilities. The system uses a modern three-tier architecture with FastAPI backend, vanilla JavaScript web frontend, and Python GUI client, all communicating via RESTful APIs for maximum compatibility.
 
 ## Project Structure
 
 ```
 NewFEM/
 ├── CLAUDE.md                    # This file - guidance for Claude Code
+├── fem_config.json             # Central configuration file for all components
 ├── backends/                    # FastAPI backend application
 │   ├── run.py                  # Main entry point
 │   ├── requirements.txt        # Python dependencies
@@ -27,7 +28,14 @@ NewFEM/
 │       ├── config.py          # Pydantic settings
 │       ├── models.py          # Pydantic models
 │       └── logging_config.py  # Logging configuration
-├── fronted/                    # Frontend application (note: typo in name)
+├── python_client/              # Python GUI client application
+│   ├── run_realtime_client.py # Main entry point for Python GUI
+│   ├── http_realtime_client.py # HTTP client with tkinter GUI
+│   ├── realtime_plotter.py    # matplotlib-based real-time plotting
+│   ├── local_config_loader.py # Configuration management from fem_config.json
+│   ├── simple_http_client.py  # Simplified HTTP client
+│   └── test_config_integration.py # Basic configuration tests
+├── fronted/                    # Web frontend application (note: typo in name)
 │   └── index.html             # Complete vanilla JS application
 └── doc/                       # Comprehensive documentation
     ├── system-architecture.md
@@ -40,21 +48,34 @@ NewFEM/
 ## Common Commands
 
 ### Running the Application
-```bash
-# Start the full system (backend + frontend)
-# From the root directory:
-python backends/run.py
 
-# Then open the frontend in a browser:
+#### Full System (Backend + Web Frontend)
+```bash
+# Start the backend server
+cd backends && python run.py
+
+# Then open the web frontend in a browser:
 # Load fronted/index.html in a web browser
 # Or use a simple HTTP server for the frontend:
 cd fronted && python -m http.server 3000
 ```
 
+#### Python GUI Client
+```bash
+# Start the backend server first
+cd backends && python run.py
+
+# Then start the Python GUI client in a separate terminal
+cd python_client && python run_realtime_client.py
+```
+
 ### Development Setup
 ```bash
-# Install Python dependencies
+# Install backend dependencies
 cd backends && pip install -r requirements.txt
+
+# Install Python client dependencies
+pip install requests matplotlib pillow
 
 # Development server with auto-reload (backend only)
 cd backends && uvicorn app.api.routes:app --reload --host 0.0.0.0 --port 8421

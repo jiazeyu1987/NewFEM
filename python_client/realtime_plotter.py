@@ -1,5 +1,11 @@
 """
-实时绘图组件 - 使用 matplotlib 实现平滑的实时曲线绘制，并与 HTTP 客户端集成。
+实时绘图组件 - 使用 matplotlib 实现实时曲线绘制，并与 HTTP 客户端集成。
+
+本版本：
+- 只保留上方的实时信号曲线坐标系；
+- 删除了下方的 Peak Signal 坐标系；
+- Y 轴固定为 50~150；
+- X 轴只显示最近 max_points 帧（默认 100 帧），不足时覆盖已有数据范围，不留空白。
 """
 
 import time
@@ -37,7 +43,6 @@ class RealtimePlotter:
         # 图表相关
         self.fig = None
         self.ax_main = None
-        self.ax_peak = None
         self.canvas = None
         self.animation = None
         self.lines: Dict[str, Any] = {}
@@ -46,7 +51,7 @@ class RealtimePlotter:
         self.show_grid = True
         self.show_peaks = True
         self.show_enhanced_peaks = True
-        # auto_scale 用于控制 X 轴窗口（是否根据数据移动），Y 轴固定 50-150
+        # auto_scale 用于控制 X 轴窗口；Y 轴固定 50-150
         self.auto_scale = True
 
         # 性能统计
@@ -62,10 +67,8 @@ class RealtimePlotter:
 
     def setup_plot(self):
         """设置图表"""
-        # 创建主图和子图
-        self.fig, (self.ax_main, self.ax_peak) = plt.subplots(
-            2, 1, figsize=self.figsize, gridspec_kw={"height_ratios": [3, 1]}
-        )
+        # 只创建一个主图
+        self.fig, self.ax_main = plt.subplots(1, 1, figsize=self.figsize)
 
         # 主图 - 信号曲线
         self.ax_main.set_title("Real-time Signal", fontsize=14, fontweight="bold")
@@ -100,20 +103,6 @@ class RealtimePlotter:
         )
 
         self.ax_main.legend(loc="upper right")
-
-        # 子图 - 峰值信号（0 / 1）
-        self.ax_peak.set_title("Peak Signal", fontsize=12)
-        self.ax_peak.set_xlabel("Time (seconds)")
-        self.ax_peak.set_ylabel("Peak Signal")
-        self.ax_peak.grid(True, alpha=0.3)
-        self.ax_peak.set_ylim(-0.5, 1.5)
-        self.ax_peak.set_yticks([0, 1])
-        self.ax_peak.set_yticklabels(["No Peak", "Peak"])
-
-        self.lines["peak_signal"], = self.ax_peak.plot(
-            [], [], "g-", linewidth=2, label="Peak Signal"
-        )
-        self.ax_peak.legend(loc="upper right")
 
         # 布局与背景
         plt.tight_layout()
@@ -244,11 +233,8 @@ class RealtimePlotter:
                 self.lines["enhanced_peaks_green"].set_data([], [])
                 self.lines["enhanced_peaks_red"].set_data([], [])
 
-            # 底部峰值信号图
-            self.lines["peak_signal"].set_data(self.time_data, self.peak_data)
-
             # X 轴覆盖当前数据范围（最多 max_points 帧），避免空白
-            if self.time_data:
+            if self.auto_scale and self.time_data:
                 if len(self.time_data) >= self.max_points:
                     # 帧数 >= max_points 时，只显示最近 max_points 帧
                     x_min = self.time_data[-self.max_points]
@@ -262,14 +248,12 @@ class RealtimePlotter:
                         # 只有一个点时给一点宽度，避免压成竖线
                         x_max = self.time_data[0] + 1.0
                 self.ax_main.set_xlim(x_min, x_max)
-                self.ax_peak.set_xlim(x_min, x_max)
 
             # Y 轴范围固定为 50-150，不根据数据自动缩放
             self.ax_main.set_ylim(50, 150)
 
             # 更新网格
             self.ax_main.grid(self.show_grid, alpha=0.3)
-            self.ax_peak.grid(self.show_grid, alpha=0.3)
 
             # 计算 FPS
             if self.update_times:

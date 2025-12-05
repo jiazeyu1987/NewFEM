@@ -194,6 +194,18 @@ class HTTPRealtimeClientUI(tk.Tk):
         # 状态变量
         self.connected = False
 
+        # UI模式状态
+        self.compact_mode = False
+        self.normal_geometry = "1200x800"
+        self.compact_geometry = "900x500"
+
+        # UI组件引用
+        self.conn_frame = None
+        self.info_frame = None
+        self.btn_clear = None
+        self.btn_save = None
+        self.btn_capture = None
+
         # 构建UI
         self._build_widgets()
         self._setup_plotter()
@@ -207,38 +219,44 @@ class HTTPRealtimeClientUI(tk.Tk):
     def _build_widgets(self):
         """构建UI组件"""
         # 顶部连接配置
-        conn_frame = ttk.LabelFrame(self, text="HTTP连接配置")
-        conn_frame.pack(fill="x", padx=8, pady=4)
+        self.conn_frame = ttk.LabelFrame(self, text="HTTP连接配置")
+        self.conn_frame.pack(fill="x", padx=8, pady=4)
 
-        ttk.Label(conn_frame, text="后端URL:").grid(row=0, column=0, sticky="e", padx=4, pady=2)
-        self.entry_base_url = ttk.Entry(conn_frame, width=40)
+        ttk.Label(self.conn_frame, text="后端URL:").grid(row=0, column=0, sticky="e", padx=4, pady=2)
+        self.entry_base_url = ttk.Entry(self.conn_frame, width=40)
         self.entry_base_url.grid(row=0, column=1, sticky="w", padx=4, pady=2)
         self.entry_base_url.insert(0, "http://localhost:8421")
 
-        ttk.Label(conn_frame, text="密码:").grid(row=0, column=2, sticky="e", padx=4, pady=2)
-        self.entry_password = ttk.Entry(conn_frame, width=12, show="*")
+        ttk.Label(self.conn_frame, text="密码:").grid(row=0, column=2, sticky="e", padx=4, pady=2)
+        self.entry_password = ttk.Entry(self.conn_frame, width=12, show="*")
         self.entry_password.grid(row=0, column=3, sticky="w", padx=4, pady=2)
         self.entry_password.insert(0, "31415")
 
         # 连接按钮
-        self.btn_connect = ttk.Button(conn_frame, text="连接", command=self._toggle_connection)
+        self.btn_connect = ttk.Button(self.conn_frame, text="连接", command=self._toggle_connection)
         self.btn_connect.grid(row=0, column=4, padx=8, pady=2)
 
         # 连接状态指示器
         self.status_var = tk.StringVar(value="未连接")
-        self.status_label = ttk.Label(conn_frame, textvariable=self.status_var, foreground="red")
+        self.status_label = ttk.Label(self.conn_frame, textvariable=self.status_var, foreground="red")
         self.status_label.grid(row=0, column=5, padx=4, pady=2)
 
         # 控制面板
         control_frame = ttk.LabelFrame(self, text="控制面板")
         control_frame.pack(fill="x", padx=8, pady=4)
 
+        # 核心按钮（始终显示）
         self.btn_start = ttk.Button(control_frame, text="开始检测", command=self._start_detection, state="disabled")
         self.btn_start.pack(side="left", padx=8, pady=4)
 
         self.btn_stop = ttk.Button(control_frame, text="停止检测", command=self._stop_detection, state="disabled")
         self.btn_stop.pack(side="left", padx=8, pady=4)
 
+        # UI模式切换按钮
+        self.btn_ui_toggle = ttk.Button(control_frame, text="缩小", command=self._toggle_ui_mode)
+        self.btn_ui_toggle.pack(side="right", padx=8, pady=4)
+
+        # 附加按钮（在紧凑模式下隐藏）
         self.btn_clear = ttk.Button(control_frame, text="清除数据", command=self._clear_data, state="disabled")
         self.btn_clear.pack(side="left", padx=8, pady=4)
 
@@ -253,11 +271,11 @@ class HTTPRealtimeClientUI(tk.Tk):
         main_frame.pack(fill="both", expand=True, padx=8, pady=4)
 
         # 左侧信息面板
-        info_frame = ttk.LabelFrame(main_frame, text="实时信息")
-        info_frame.pack(side="left", fill="y", padx=(0, 8))
+        self.info_frame = ttk.LabelFrame(main_frame, text="实时信息")
+        self.info_frame.pack(side="left", fill="y", padx=(0, 8))
 
         # 状态信息
-        status_info = ttk.Frame(info_frame)
+        status_info = ttk.Frame(self.info_frame)
         status_info.pack(fill="x", padx=8, pady=4)
 
         ttk.Label(status_info, text="数据点数:").grid(row=0, column=0, sticky="w", pady=2)
@@ -281,10 +299,10 @@ class HTTPRealtimeClientUI(tk.Tk):
         self.polling_status_label.grid(row=4, column=1, sticky="w", padx=(8, 0), pady=2)
 
         # 分隔线
-        ttk.Separator(info_frame, orient="horizontal").pack(fill="x", pady=8)
+        ttk.Separator(self.info_frame, orient="horizontal").pack(fill="x", pady=8)
 
         # 参数设置面板
-        config_frame = ttk.LabelFrame(info_frame, text="参数设置")
+        config_frame = ttk.LabelFrame(self.info_frame, text="参数设置")
         config_frame.pack(fill="x", padx=8, pady=4)
 
         # ROI设置子面板
@@ -361,7 +379,7 @@ class HTTPRealtimeClientUI(tk.Tk):
         ttk.Button(config_buttons, text="加载配置", command=self._load_config).pack(side="left", padx=4)
 
         # ROI截图显示面板
-        roi_frame = ttk.LabelFrame(info_frame, text="ROI Screenshot")
+        roi_frame = ttk.LabelFrame(self.info_frame, text="ROI Screenshot")
         roi_frame.pack(fill="x", padx=8, pady=4)
 
         # 创建ROI截图标签
@@ -382,7 +400,7 @@ class HTTPRealtimeClientUI(tk.Tk):
         self.roi_gray_value_label.pack(side="left", padx=(8, 16))
 
         # 日志面板
-        log_frame = ttk.LabelFrame(info_frame, text="日志")
+        log_frame = ttk.LabelFrame(self.info_frame, text="日志")
         log_frame.pack(fill="both", expand=True, padx=8, pady=4)
 
         self.log_text = scrolledtext.ScrolledText(log_frame, height=15, width=40)
@@ -1391,6 +1409,72 @@ class HTTPRealtimeClientUI(tk.Tk):
         except Exception as e:
             print(f"Error during cleanup: {e}")
             self.destroy()
+
+    def _toggle_ui_mode(self):
+        """切换UI模式（紧凑/完整）"""
+        self.compact_mode = not self.compact_mode
+
+        if self.compact_mode:
+            # 切换到紧凑模式
+            self.geometry(self.compact_geometry)
+            self.btn_ui_toggle.config(text="放大")
+
+            # 隐藏非必要组件
+            if self.conn_frame:
+                self.conn_frame.pack_forget()
+            if self.info_frame:
+                self.info_frame.pack_forget()
+            if self.btn_clear:
+                self.btn_clear.pack_forget()
+            if self.btn_save:
+                self.btn_save.pack_forget()
+            if self.btn_capture:
+                self.btn_capture.pack_forget()
+
+            # 简化状态文本
+            if hasattr(self, 'status_var') and self.status_var:
+                current_text = self.status_var.get()
+                if "已连接" in current_text:
+                    self.status_var.set("运行中")
+                else:
+                    self.status_var.set("就绪")
+
+        else:
+            # 切换到完整模式
+            self.geometry(self.normal_geometry)
+            self.btn_ui_toggle.config(text="缩小")
+
+            # 重新显示所有组件
+            if self.conn_frame:
+                self.conn_frame.pack(fill="x", padx=8, pady=4, before=self.winfo_children()[1])
+            if self.info_frame:
+                # 找到主框架并重新添加info_frame
+                for child in self.winfo_children():
+                    if isinstance(child, ttk.Frame) and len(child.winfo_children()) > 0:
+                        # 检查是否是主框架（包含图表）
+                        for grandchild in child.winfo_children():
+                            if hasattr(grandchild, 'figure'):  # matplotlib canvas
+                                self.info_frame.pack(side="left", fill="y", padx=(0, 8), before=grandchild)
+                                break
+                        break
+
+            if self.btn_clear:
+                self.btn_clear.pack(side="left", padx=8, pady=4, after=self.btn_stop)
+            if self.btn_save:
+                self.btn_save.pack(side="left", padx=8, pady=4, after=self.btn_clear)
+            if self.btn_capture:
+                self.btn_capture.pack(side="left", padx=8, pady=4, after=self.btn_save)
+
+            # 恢复详细状态文本
+            if hasattr(self, 'status_var') and self.status_var:
+                current_text = self.status_var.get()
+                if "运行中" in current_text:
+                    self.status_var.set("已连接")
+                elif "就绪" in current_text:
+                    self.status_var.set("未连接")
+
+        # 重新布局和绘制
+        self.update_idletasks()
 
 
 def main():

@@ -35,6 +35,11 @@ class SimpleHTTPClient:
         self.root.title("NewFEM Simple HTTP Client")
         self.root.geometry("1000x700")
 
+        # UI模式状态
+        self.compact_mode = False
+        self.normal_geometry = "1000x700"
+        self.compact_geometry = "800x400"
+
         # 状态
         self.running = False
         self.data_count = 0
@@ -42,6 +47,13 @@ class SimpleHTTPClient:
         # 数据存储
         self.time_data = []
         self.signal_data = []
+
+        # UI组件引用
+        self.status_label = None
+        self.data_label = None
+        self.clear_button = None
+        self.exit_button = None
+        self.toggle_button = None
 
         # 构建UI
         self._build_ui()
@@ -53,19 +65,31 @@ class SimpleHTTPClient:
     def _build_ui(self):
         """构建简化UI"""
         # 顶部状态栏
-        status_frame = ttk.Frame(self.root)
-        status_frame.pack(fill="x", padx=5, pady=5)
+        self.status_frame = ttk.Frame(self.root)
+        self.status_frame.pack(fill="x", padx=5, pady=5)
 
-        self.status_label = ttk.Label(status_frame, text="Initializing...", font=("Arial", 12))
+        # 状态标签组
+        self.status_label = ttk.Label(self.status_frame, text="Initializing...", font=("Arial", 12))
         self.status_label.pack(side="left", padx=10)
 
-        self.data_label = ttk.Label(status_frame, text="Data: 0 points")
+        self.data_label = ttk.Label(self.status_frame, text="Data: 0 points")
         self.data_label.pack(side="left", padx=20)
 
-        # 控制按钮
-        ttk.Button(status_frame, text="Start/Stop", command=self.toggle_detection).pack(side="right", padx=5)
-        ttk.Button(status_frame, text="Clear", command=self.clear_data).pack(side="right", padx=5)
-        ttk.Button(status_frame, text="Exit", command=self.root.quit).pack(side="right", padx=5)
+        # 控制按钮组 - 分为核心按钮和附加按钮
+        # 核心按钮（始终显示）
+        self.toggle_button = ttk.Button(self.status_frame, text="Start/Stop", command=self.toggle_detection)
+        self.toggle_button.pack(side="right", padx=5)
+
+        # UI模式切换按钮
+        self.ui_mode_button = ttk.Button(self.status_frame, text="缩小", command=self.toggle_ui_mode)
+        self.ui_mode_button.pack(side="right", padx=5)
+
+        # 附加按钮（在紧凑模式下隐藏）
+        self.clear_button = ttk.Button(self.status_frame, text="Clear", command=self.clear_data)
+        self.clear_button.pack(side="right", padx=5)
+
+        self.exit_button = ttk.Button(self.status_frame, text="Exit", command=self.root.quit)
+        self.exit_button.pack(side="right", padx=5)
 
         # 图表区域
         self.plot_frame = ttk.Frame(self.root)
@@ -349,6 +373,59 @@ class SimpleHTTPClient:
 
         self.canvas.draw()
         self.data_label.config(text="Data: 0 points")
+
+    def toggle_ui_mode(self):
+        """切换UI模式（紧凑/完整）"""
+        self.compact_mode = not self.compact_mode
+
+        if self.compact_mode:
+            # 切换到紧凑模式
+            self.root.geometry(self.compact_geometry)
+            self.ui_mode_button.config(text="放大")
+
+            # 隐藏非必要元素
+            self.data_label.pack_forget()
+            self.clear_button.pack_forget()
+            self.exit_button.pack_forget()
+
+            # 调整图表大小
+            self.fig.set_size_inches(10, 5)
+
+            # 简化状态文本
+            if hasattr(self, 'status_label') and self.status_label:
+                current_text = self.status_label.cget("text")
+                if "Running" in current_text:
+                    self.status_label.config(text="运行中")
+                elif "Connected" in current_text:
+                    self.status_label.config(text="已连接")
+                else:
+                    self.status_label.config(text="就绪")
+
+        else:
+            # 切换到完整模式
+            self.root.geometry(self.normal_geometry)
+            self.ui_mode_button.config(text="缩小")
+
+            # 显示所有元素
+            self.data_label.pack(side="left", padx=20, after=self.status_label)
+            self.clear_button.pack(side="right", padx=5)
+            self.exit_button.pack(side="right", padx=5)
+
+            # 恢复图表大小
+            self.fig.set_size_inches(12, 6)
+
+            # 恢复详细状态文本
+            if hasattr(self, 'status_label') and self.status_label:
+                current_text = self.status_label.cget("text")
+                if "运行中" in current_text:
+                    self.status_label.config(text="✓ Connected - Running...")
+                elif "已连接" in current_text:
+                    self.status_label.config(text="✓ Connected - Ready")
+                else:
+                    self.status_label.config(text="Initializing...")
+
+        # 重新绘制图表
+        self.canvas.draw()
 
     def run(self):
         """运行应用"""
