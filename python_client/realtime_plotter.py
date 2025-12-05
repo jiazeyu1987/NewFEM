@@ -1,125 +1,136 @@
 """
-实时绘图组件 - 使用matplotlib实现流畅的实时曲线绘制
-与Socket客户端集成，支持多种数据类型显示
+实时绘图组件 - 使用 matplotlib 实现平滑的实时曲线绘制，并与 HTTP 客户端集成。
 """
 
-import threading
 import time
 import logging
-from typing import Dict, Any, List, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime
+from typing import Dict, Any, List, Optional
 
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 
-# 设置logger
 logger = logging.getLogger(__name__)
 
-# 设置matplotlib使用英文标签避免字体问题
-plt.rcParams['font.sans-serif'] = ['Arial', 'DejaVu Sans', 'Liberation Sans']
-plt.rcParams['axes.unicode_minus'] = False
+# 使用英文字体，避免中文字体问题
+plt.rcParams["font.sans-serif"] = ["Arial", "DejaVu Sans", "Liberation Sans"]
+plt.rcParams["axes.unicode_minus"] = False
 
 
 class RealtimePlotter:
     """实时绘图器"""
 
-    def __init__(self, master=None, figsize=(12, 8), max_points=100):
+    def __init__(self, master=None, figsize=(12, 8), max_points: int = 100):
         self.master = master
         self.figsize = figsize
+        # 只保留最近 max_points 帧，用于控制 X 轴窗口长度
         self.max_points = max_points
 
         # 数据存储
-        self.time_data = []
-        self.signal_data = []
-        self.peak_data = []
-        self.enhanced_peak_data = []  # 增强波峰数据
+        self.time_data: List[float] = []
+        self.signal_data: List[float] = []
+        self.peak_data: List[int] = []
+        self.enhanced_peak_data: List[Optional[Dict[str, Any]]] = []
 
-        # 图表配置
+        # 图表相关
         self.fig = None
         self.ax_main = None
         self.ax_peak = None
         self.canvas = None
         self.animation = None
-        self.lines = {}
+        self.lines: Dict[str, Any] = {}
 
         # 显示选项
         self.show_grid = True
         self.show_peaks = True
         self.show_enhanced_peaks = True
-        # auto_scale 仅用于控制 X 轴窗口，Y 轴固定 0-200
+        # auto_scale 用于控制 X 轴窗口（是否根据数据移动），Y 轴固定 50-150
         self.auto_scale = True
 
         # 性能统计
         self.update_count = 0
-        self.fps = 0
+        self.fps = 0.0
         self.last_update_time = time.time()
-        self.update_times = []
+        self.update_times: List[float] = []
+
+        # 起始时间（用于将时间戳转换为相对时间）
+        self.start_time: Optional[datetime] = None
 
         logger.info("RealtimePlotter initialized")
 
     def setup_plot(self):
         """设置图表"""
-        # 创建图表和子图
+        # 创建主图和子图
         self.fig, (self.ax_main, self.ax_peak) = plt.subplots(
-            2, 1, figsize=self.figsize, gridspec_kw={'height_ratios': [3, 1]}
+            2, 1, figsize=self.figsize, gridspec_kw={"height_ratios": [3, 1]}
         )
 
-        # 主图表 - 信号曲线
-        self.ax_main.set_title("Real-time Signal", fontsize=14, fontweight='bold')
+        # 主图 - 信号曲线
+        self.ax_main.set_title("Real-time Signal", fontsize=14, fontweight="bold")
         self.ax_main.set_xlabel("Time (seconds)")
         self.ax_main.set_ylabel("Signal Value")
         self.ax_main.grid(True, alpha=0.3)
-        self.ax_main.set_xlim(0, 10)  # 初始显示10秒数据
-        # 固定Y轴范围为0-200，与Web前端实时波形保持一致
-        self.ax_main.set_ylim(0, 200)
+        self.ax_main.set_xlim(0, 10)
+        # 固定 Y 轴范围为 50-150
+        self.ax_main.set_ylim(50, 150)
 
-        # 创建主线（信号曲线）
-        self.lines['signal'], = self.ax_main.plot([], [], 'b-', linewidth=1.5, label='Signal', alpha=0.8)
+        # 主曲线
+        self.lines["signal"], = self.ax_main.plot(
+            [], [], "b-", linewidth=1.5, label="Signal", alpha=0.8
+        )
 
         # 基线
-        self.lines['baseline'], = self.ax_main.plot([], [], 'r--', linewidth=1, label='Baseline', alpha=0.6)
+        self.lines["baseline"], = self.ax_main.plot(
+            [], [], "r--", linewidth=1, label="Baseline", alpha=0.6
+        )
 
-        # 波峰点
-        self.lines['peaks'], = self.ax_main.plot([], [], 'ro', markersize=6, label='Peaks', alpha=0.8)
+        # 简单峰值点
+        self.lines["peaks"], = self.ax_main.plot(
+            [], [], "ro", markersize=6, label="Peaks", alpha=0.8
+        )
 
-        # 增强波峰点（不同颜色）
-        self.lines['enhanced_peaks_green'], = self.ax_main.plot([], [], 'go', markersize=8, label='Green Peaks', alpha=0.8)
-        self.lines['enhanced_peaks_red'], = self.ax_main.plot([], [], 'ro', markersize=8, label='Red Peaks', alpha=0.8)
+        # 增强峰值点（绿 / 红）
+        self.lines["enhanced_peaks_green"], = self.ax_main.plot(
+            [], [], "go", markersize=8, label="Green Peaks", alpha=0.8
+        )
+        self.lines["enhanced_peaks_red"], = self.ax_main.plot(
+            [], [], "ro", markersize=8, label="Red Peaks", alpha=0.8
+        )
 
-        self.ax_main.legend(loc='upper right')
+        self.ax_main.legend(loc="upper right")
 
-        # 底部图表 - 波峰信号
+        # 子图 - 峰值信号（0 / 1）
         self.ax_peak.set_title("Peak Signal", fontsize=12)
         self.ax_peak.set_xlabel("Time (seconds)")
         self.ax_peak.set_ylabel("Peak Signal")
         self.ax_peak.grid(True, alpha=0.3)
         self.ax_peak.set_ylim(-0.5, 1.5)
         self.ax_peak.set_yticks([0, 1])
-        self.ax_peak.set_yticklabels(['No Peak', 'Peak'])
+        self.ax_peak.set_yticklabels(["No Peak", "Peak"])
 
-        self.lines['peak_signal'], = self.ax_peak.plot([], [], 'g-', linewidth=2, label='Peak Signal')
-        self.ax_peak.legend(loc='upper right')
+        self.lines["peak_signal"], = self.ax_peak.plot(
+            [], [], "g-", linewidth=2, label="Peak Signal"
+        )
+        self.ax_peak.legend(loc="upper right")
 
-        # 布局调整
+        # 布局与背景
         plt.tight_layout()
-
-        # 设置背景颜色
-        self.fig.patch.set_facecolor('#f0f0f0')
+        self.fig.patch.set_facecolor("#f0f0f0")
 
     def setup_canvas(self):
-        """设置Tkinter Canvas"""
+        """设置 Tkinter Canvas"""
         if self.master:
             self.canvas = FigureCanvasTkAgg(self.fig, master=self.master)
             self.canvas.draw()
-            self.canvas.get_tk_widget().pack(fill='both', expand=True)
+            self.canvas.get_tk_widget().pack(fill="both", expand=True)
         else:
-            # 如果没有master，使用matplotlib的默认显示
+            # 无 Tkinter 容器时，直接使用 matplotlib 默认显示
             plt.show(block=False)
 
     def update_data(self, data: Dict[str, Any]):
-        """更新数据"""
+        """更新数据（由 HTTP 客户端轮询时调用）"""
         try:
             # 更新性能统计
             current_time = time.time()
@@ -128,56 +139,52 @@ class RealtimePlotter:
             self.update_times.append(update_time)
             self.last_update_time = current_time
 
-            # 保持最近100次更新的时间用于计算FPS
+            # 只保留最近 100 次更新时间用于计算 FPS
             if len(self.update_times) > 100:
                 self.update_times = self.update_times[-100:]
 
-            # 提取时间戳和信号值 - 信号值在series数组中
+            # 解析信号值
             timestamp = data.get("timestamp")
             series = data.get("series", [])
             if series:
-                signal_value = series[0].get("value", 0)
+                signal_value = series[0].get("value", 0.0)
             else:
-                signal_value = data.get("signal_value", 0)
-            peak_signal = data.get("peak_signal")
-            frame_count = data.get("frame_count", 0)
+                signal_value = data.get("signal_value", 0.0)
 
-            # 转换时间戳为相对秒数（相对于第一个数据点）
+            peak_signal = data.get("peak_signal")
+
+            # 将时间戳转换为相对时间（秒）
             if timestamp:
-                dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                dt = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
                 if not self.time_data:
                     self.start_time = dt
                 relative_time = (dt - self.start_time).total_seconds()
             else:
-                # 如果没有时间戳，使用累积时间
+                # 没有时间戳时，使用本地时间累积
                 if not self.time_data:
-                    self.start_time = time.time()
-                relative_time = time.time() - self.start_time
+                    self.start_time = datetime.fromtimestamp(time.time())
+                relative_time = time.time() - self.start_time.timestamp()
 
-            # 添加数据点
+            # 追加数据
             self.time_data.append(relative_time)
-            self.signal_data.append(signal_value)
+            self.signal_data.append(float(signal_value))
+            self.peak_data.append(int(peak_signal) if peak_signal is not None else 0)
 
-            if peak_signal is not None:
-                self.peak_data.append(peak_signal)
-            else:
-                self.peak_data.append(0)
-
-            # 处理增强波峰数据
+            # 处理增强峰值信息（可选）
             enhanced_peak = data.get("enhanced_peak", {})
             if enhanced_peak:
-                peak_color = enhanced_peak.get("peak_color")
-                peak_confidence = enhanced_peak.get("peak_confidence", 0.0)
-                self.enhanced_peak_data.append({
-                    "time": relative_time,
-                    "value": signal_value,
-                    "color": peak_color,
-                    "confidence": peak_confidence
-                })
+                self.enhanced_peak_data.append(
+                    {
+                        "time": relative_time,
+                        "value": float(signal_value),
+                        "color": enhanced_peak.get("peak_color"),
+                        "confidence": float(enhanced_peak.get("peak_confidence", 0.0)),
+                    }
+                )
             else:
                 self.enhanced_peak_data.append(None)
 
-            # 限制数据点数量
+            # 限制数据点数量到最近 max_points 帧
             if len(self.time_data) > self.max_points:
                 self.time_data = self.time_data[-self.max_points:]
                 self.signal_data = self.signal_data[-self.max_points:]
@@ -188,78 +195,86 @@ class RealtimePlotter:
             logger.error(f"Error updating plot data: {e}")
 
     def update_plot(self, frame=None):
-        """更新图表（动画函数）"""
+        """更新图表（动画回调）"""
         try:
             if not self.time_data:
                 return self.lines.values()
 
-            # 更新主线（信号曲线）
-            self.lines['signal'].set_data(self.time_data, self.signal_data)
+            # 主信号曲线
+            self.lines["signal"].set_data(self.time_data, self.signal_data)
 
-            # 更新基线（使用最近100个点的平均值）
-            if len(self.signal_data) > 100:
-                baseline = np.mean(self.signal_data[-100:])
+            # 基线：使用最近 20 个点的均值
+            if len(self.signal_data) >= 20:
+                baseline = float(np.mean(self.signal_data[-20:]))
                 baseline_data = [baseline] * len(self.time_data)
-                self.lines['baseline'].set_data(self.time_data, baseline_data)
+                self.lines["baseline"].set_data(self.time_data, baseline_data)
             else:
-                self.lines['baseline'].set_data([], [])
+                self.lines["baseline"].set_data([], [])
 
-            # 更新波峰点
+            # 简单峰值点
             if self.show_peaks:
-                peak_times = []
-                peak_values = []
-                for i, peak_val in enumerate(self.peak_data):
-                    if peak_val == 1:  # 有波峰
-                        peak_times.append(self.time_data[i])
-                        peak_values.append(self.signal_data[i])
-
-                self.lines['peaks'].set_data(peak_times, peak_values)
+                peak_times = [
+                    t for t, p in zip(self.time_data, self.peak_data) if p == 1
+                ]
+                peak_values = [
+                    v for v, p in zip(self.signal_data, self.peak_data) if p == 1
+                ]
+                self.lines["peaks"].set_data(peak_times, peak_values)
             else:
-                self.lines['peaks'].set_data([], [])
+                self.lines["peaks"].set_data([], [])
 
-            # 更新增强波峰点
+            # 增强峰值点（绿 / 红）
             if self.show_enhanced_peaks:
                 green_times, green_values = [], []
                 red_times, red_values = [], []
 
-                for i, peak_info in enumerate(self.enhanced_peak_data):
-                    if peak_info and i < len(self.time_data):
-                        if peak_info["color"] == "green":
-                            green_times.append(peak_info["time"])
-                            green_values.append(peak_info["value"])
-                        elif peak_info["color"] == "red":
-                            red_times.append(peak_info["time"])
-                            red_values.append(peak_info["value"])
+                for info in self.enhanced_peak_data:
+                    if not info:
+                        continue
+                    if info.get("color") == "green":
+                        green_times.append(info["time"])
+                        green_values.append(info["value"])
+                    elif info.get("color") == "red":
+                        red_times.append(info["time"])
+                        red_values.append(info["value"])
 
-                self.lines['enhanced_peaks_green'].set_data(green_times, green_values)
-                self.lines['enhanced_peaks_red'].set_data(red_times, red_values)
+                self.lines["enhanced_peaks_green"].set_data(green_times, green_values)
+                self.lines["enhanced_peaks_red"].set_data(red_times, red_values)
             else:
-                self.lines['enhanced_peaks_green'].set_data([], [])
-                self.lines['enhanced_peaks_red'].set_data([], [])
+                self.lines["enhanced_peaks_green"].set_data([], [])
+                self.lines["enhanced_peaks_red"].set_data([], [])
 
-            # 更新波峰信号图
-            self.lines['peak_signal'].set_data(self.time_data, self.peak_data)
+            # 底部峰值信号图
+            self.lines["peak_signal"].set_data(self.time_data, self.peak_data)
 
-            # 自动调整X轴范围（仅X轴）
-            if self.auto_scale and self.time_data:
-                if self.time_data[-1] > 10:
-                    # 显示最近10秒的数据
-                    x_min = max(0, self.time_data[-1] - 10)
-                    x_max = self.time_data[-1] + 0.5
-                    self.ax_main.set_xlim(x_min, x_max)
-                    self.ax_peak.set_xlim(x_min, x_max)
+            # X 轴覆盖当前数据范围（最多 max_points 帧），避免空白
+            if self.time_data:
+                if len(self.time_data) >= self.max_points:
+                    # 帧数 >= max_points 时，只显示最近 max_points 帧
+                    x_min = self.time_data[-self.max_points]
+                    x_max = self.time_data[-1]
+                else:
+                    # 帧数 < max_points 时，覆盖当前所有数据范围
+                    x_min = self.time_data[0]
+                    if len(self.time_data) > 1:
+                        x_max = self.time_data[-1]
+                    else:
+                        # 只有一个点时给一点宽度，避免压成竖线
+                        x_max = self.time_data[0] + 1.0
+                self.ax_main.set_xlim(x_min, x_max)
+                self.ax_peak.set_xlim(x_min, x_max)
 
-            # Y轴范围固定为0-200，不根据数据自动缩放
-            self.ax_main.set_ylim(0, 200)
+            # Y 轴范围固定为 50-150，不根据数据自动缩放
+            self.ax_main.set_ylim(50, 150)
 
             # 更新网格
             self.ax_main.grid(self.show_grid, alpha=0.3)
             self.ax_peak.grid(self.show_grid, alpha=0.3)
 
-            # 计算FPS
+            # 计算 FPS
             if self.update_times:
-                avg_update_time = np.mean(self.update_times[-10:])  # 最近10次的平均时间
-                self.fps = 1.0 / avg_update_time if avg_update_time > 0 else 0
+                avg_update_time = np.mean(self.update_times[-10:])
+                self.fps = float(1.0 / avg_update_time) if avg_update_time > 0 else 0.0
 
             return self.lines.values()
 
@@ -267,8 +282,8 @@ class RealtimePlotter:
             logger.error(f"Error updating plot: {e}")
             return self.lines.values()
 
-    def start_animation(self, interval=50):  # 20 FPS
-        """启动动画"""
+    def start_animation(self, interval: int = 50):
+        """启动动画（默认 20 FPS）"""
         if self.animation:
             self.animation.event_source.stop()
 
@@ -294,7 +309,13 @@ class RealtimePlotter:
         self.update_count = 0
         self.update_times.clear()
 
-    def set_display_options(self, show_grid=True, show_peaks=True, show_enhanced_peaks=True, auto_scale=True):
+    def set_display_options(
+        self,
+        show_grid: bool = True,
+        show_peaks: bool = True,
+        show_enhanced_peaks: bool = True,
+        auto_scale: bool = True,
+    ):
         """设置显示选项"""
         self.show_grid = show_grid
         self.show_peaks = show_peaks
@@ -307,18 +328,23 @@ class RealtimePlotter:
             "data_points": len(self.time_data),
             "update_count": self.update_count,
             "fps": self.fps,
-            "peaks_detected": sum(self.peak_data),
-            "enhanced_peaks_green": len([p for p in self.enhanced_peak_data if p and p.get("color") == "green"]),
-            "enhanced_peaks_red": len([p for p in self.enhanced_peak_data if p and p.get("color") == "red"]),
+            "peaks_detected": int(sum(self.peak_data)),
+            "enhanced_peaks_green": len(
+                [p for p in self.enhanced_peak_data if p and p.get("color") == "green"]
+            ),
+            "enhanced_peaks_red": len(
+                [p for p in self.enhanced_peak_data if p and p.get("color") == "red"]
+            ),
             "signal_range": {
-                "min": min(self.signal_data) if self.signal_data else 0,
-                "max": max(self.signal_data) if self.signal_data else 0,
-                "avg": np.mean(self.signal_data) if self.signal_data else 0
-            }
+                "min": float(min(self.signal_data)) if self.signal_data else 0.0,
+                "max": float(max(self.signal_data)) if self.signal_data else 0.0,
+                "avg": float(np.mean(self.signal_data)) if self.signal_data else 0.0,
+            },
         }
 
     def save_screenshot(self, filename: str):
         """保存截图"""
         if self.fig:
-            self.fig.savefig(filename, dpi=150, bbox_inches='tight')
+            self.fig.savefig(filename, dpi=150, bbox_inches="tight")
             logger.info(f"Screenshot saved to {filename}")
+
