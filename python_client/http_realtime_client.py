@@ -8,7 +8,7 @@ import logging
 import threading
 import time
 import tkinter as tk
-from tkinter import messagebox, ttk, scrolledtext
+from tkinter import messagebox, ttk, scrolledtext, StringVar
 import requests
 from typing import Dict, Any, Optional
 from PIL import Image, ImageTk
@@ -281,6 +281,83 @@ class HTTPRealtimeClientUI(tk.Tk):
 
         # 分隔线
         ttk.Separator(info_frame, orient="horizontal").pack(fill="x", pady=8)
+
+        # 参数设置面板
+        config_frame = ttk.LabelFrame(info_frame, text="参数设置")
+        config_frame.pack(fill="x", padx=8, pady=4)
+
+        # ROI设置子面板
+        roi_config_frame = ttk.LabelFrame(config_frame, text="ROI配置")
+        roi_config_frame.pack(fill="x", padx=8, pady=4)
+
+        # ROI坐标设置
+        roi_coords = ttk.Frame(roi_config_frame)
+        roi_coords.pack(fill="x", padx=8, pady=2)
+
+        ttk.Label(roi_coords, text="X1:").grid(row=0, column=0, sticky="w")
+        self.roi_x1_var = tk.StringVar(value="0")
+        ttk.Entry(roi_coords, textvariable=self.roi_x1_var, width=8).grid(row=0, column=1, padx=2)
+
+        ttk.Label(roi_coords, text="Y1:").grid(row=0, column=2, sticky="w", padx=(10,0))
+        self.roi_y1_var = tk.StringVar(value="0")
+        ttk.Entry(roi_coords, textvariable=self.roi_y1_var, width=8).grid(row=0, column=3, padx=2)
+
+        ttk.Label(roi_coords, text="X2:").grid(row=1, column=0, sticky="w")
+        self.roi_x2_var = tk.StringVar(value="200")
+        ttk.Entry(roi_coords, textvariable=self.roi_x2_var, width=8).grid(row=1, column=1, padx=2)
+
+        ttk.Label(roi_coords, text="Y2:").grid(row=1, column=2, sticky="w", padx=(10,0))
+        self.roi_y2_var = tk.StringVar(value="150")
+        ttk.Entry(roi_coords, textvariable=self.roi_y2_var, width=8).grid(row=1, column=3, padx=2)
+
+        # ROI帧率设置
+        roi_fps_frame = ttk.Frame(roi_config_frame)
+        roi_fps_frame.pack(fill="x", padx=8, pady=2)
+
+        ttk.Label(roi_fps_frame, text="ROI帧率:").pack(side="left")
+        self.roi_fps_var = tk.StringVar(value="2")
+        fps_spinbox = ttk.Spinbox(roi_fps_frame, from_=1, to=60, textvariable=self.roi_fps_var, width=8)
+        fps_spinbox.pack(side="left", padx=(8, 4))
+        ttk.Label(roi_fps_frame, text="FPS").pack(side="left")
+
+        # 波峰检测设置子面板
+        peak_config_frame = ttk.LabelFrame(config_frame, text="波峰检测设置")
+        peak_config_frame.pack(fill="x", padx=8, pady=4)
+
+        # 绝对阈值
+        threshold_frame = ttk.Frame(peak_config_frame)
+        threshold_frame.pack(fill="x", padx=8, pady=2)
+
+        ttk.Label(threshold_frame, text="绝对阈值:").pack(side="left")
+        self.peak_threshold_var = tk.StringVar(value="105.0")
+        ttk.Entry(threshold_frame, textvariable=self.peak_threshold_var, width=10).pack(side="left", padx=(8, 4))
+        ttk.Label(threshold_frame, text="灰度值").pack(side="left")
+
+        # 边界帧数
+        margin_frame = ttk.Frame(peak_config_frame)
+        margin_frame.pack(fill="x", padx=8, pady=2)
+
+        ttk.Label(margin_frame, text="边界帧数:").pack(side="left")
+        self.peak_margin_var = tk.StringVar(value="5")
+        ttk.Spinbox(margin_frame, from_=1, to=20, textvariable=self.peak_margin_var, width=8).pack(side="left", padx=(8, 4))
+        ttk.Label(margin_frame, text="帧").pack(side="left")
+
+        # 差值阈值
+        diff_frame = ttk.Frame(peak_config_frame)
+        diff_frame.pack(fill="x", padx=8, pady=2)
+
+        ttk.Label(diff_frame, text="差值阈值:").pack(side="left")
+        self.peak_diff_var = tk.StringVar(value="2.1")
+        ttk.Entry(diff_frame, textvariable=self.peak_diff_var, width=10).pack(side="left", padx=(8, 4))
+
+        # 应用配置按钮
+        config_buttons = ttk.Frame(config_frame)
+        config_buttons.pack(fill="x", padx=8, pady=4)
+
+        ttk.Button(config_buttons, text="应用ROI配置", command=self._apply_roi_config).pack(side="left", padx=4)
+        ttk.Button(config_buttons, text="应用波峰配置", command=self._apply_peak_config).pack(side="left", padx=4)
+        ttk.Button(config_buttons, text="保存配置", command=self._save_config).pack(side="left", padx=4)
+        ttk.Button(config_buttons, text="加载配置", command=self._load_config).pack(side="left", padx=4)
 
         # ROI截图显示面板
         roi_frame = ttk.LabelFrame(info_frame, text="ROI Screenshot")
@@ -648,20 +725,52 @@ class HTTPRealtimeClientUI(tk.Tk):
             self._log("Starting curve capture...")
             self.btn_capture.config(state="disabled", text="截取中...")
 
-            # 使用ROI窗口截取API获取带波峰检测的数据
+            # 使用ROI窗口截取API获取带波峰检测的数据，强制刷新缓存
             response = self.http_client.session.get(
-                f"{self.http_client.base_url}/data/roi-window-capture-with-peaks?count=100",
+                f"{self.http_client.base_url}/data/roi-window-capture-with-peaks?count=100&force_refresh=true",
                 timeout=10
             )
 
             if response.status_code == 200:
                 data = response.json()
                 if data.get("success"):
-                    # 获取截取的数据
-                    captured_data = data.get("data", [])
-                    peaks = data.get("peaks", [])
+                    # 获取截取的数据 - 适配服务器返回的数据结构
+                    captured_data = data.get("series", [])
+                    peak_results = data.get("peak_detection_results", {})
+
+                    # 将波峰数据转换为客户端期望的格式
+                    peaks = []
+                    green_peaks = peak_results.get("green_peaks", [])
+                    red_peaks = peak_results.get("red_peaks", [])
+
+                    # 转换波峰数据格式
+                    for peak_info in green_peaks:
+                        if len(peak_info) >= 2 and peak_info[0] < len(captured_data):
+                            peaks.append({
+                                't': captured_data[peak_info[0]]['t'],
+                                'value': captured_data[peak_info[0]]['gray_value'],
+                                'peak_color': 'green'
+                            })
+
+                    for peak_info in red_peaks:
+                        if len(peak_info) >= 2 and peak_info[0] < len(captured_data):
+                            peaks.append({
+                                't': captured_data[peak_info[0]]['t'],
+                                'value': captured_data[peak_info[0]]['gray_value'],
+                                'peak_color': 'red'
+                            })
 
                     if captured_data:
+                        # 添加调试信息验证修复效果
+                        times = [point.get("t", 0) for point in captured_data]
+                        values = [point.get("gray_value", point.get("value", 0)) for point in captured_data]
+
+                        if times and values:
+                            time_range = max(times) - min(times) if len(times) > 1 else 0
+                            value_range = max(values) - min(values) if len(values) > 1 else 0
+                            self._log(f"DEBUG: Time range: {time_range:.3f}s, Value range: {value_range:.2f}")
+                            self._log(f"DEBUG: Time span: [{min(times):.3f}, {max(times):.3f}], Value span: [{min(values):.2f}, {max(values):.2f}]")
+
                         self._log(f"Curve capture successful! Got {len(captured_data)} data points with {len(peaks)} peaks")
                         self._display_captured_curve(captured_data, peaks)
 
@@ -672,8 +781,8 @@ class HTTPRealtimeClientUI(tk.Tk):
                         # 启用清除按钮
                         self.btn_clear_capture.config(state="normal")
 
-                        # 成功提示
-                        messagebox.showinfo("成功", f"曲线截取成功！\n数据点数: {len(captured_data)}\n波峰数: {len(peaks)}")
+                        # 成功日志记录（不显示弹框）
+                        self._log(f"✅ 曲线截取成功！数据点数: {len(captured_data)}, 波峰数: {len(peaks)}")
                     else:
                         raise Exception("No captured data received")
                 else:
@@ -694,17 +803,45 @@ class HTTPRealtimeClientUI(tk.Tk):
             from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
             import numpy as np
 
+            # 首先清理之前的画布 - 修复第二次截取无法显示的关键问题
+            self._clear_capture()
+
             # 创建新图表
             fig, ax = plt.subplots(figsize=(10, 4), dpi=100)
             fig.patch.set_facecolor('white')
 
-            # 提取时间和数值
+            # 提取时间和数值 - 适配服务器返回的数据格式
             times = [point.get("t", 0) for point in data_points]
-            values = [point.get("value", 0) for point in data_points]
+            values = [point.get("gray_value", point.get("value", 0)) for point in data_points]
 
-            if times and values:
+            self._log(f"DEBUG: Preparing to display curve with {len(times)} points")
+            self._log(f"DEBUG: Data validation - times count: {len(times)}, values count: {len(values)}")
+
+            # 验证数据完整性
+            if len(times) != len(values):
+                raise ValueError(f"Data length mismatch: {len(times)} times vs {len(values)} values")
+
+            if not times or not values:
+                raise ValueError("No valid data points to display")
+
+            # 验证数据范围
+            if len(times) > 0 and len(values) > 0:
                 # 绘制曲线
                 ax.plot(times, values, 'b-', linewidth=2, label='Captured Signal')
+
+                # 强制设置Y轴范围，确保小的灰度变化能够清晰显示
+                min_val = min(values)
+                max_val = max(values)
+                value_range = max_val - min_val
+
+                if value_range < 10:  # 如果数据范围太小，强制扩展显示范围
+                    center = (min_val + max_val) / 2
+                    expanded_range = 5  # 至少显示5的范围
+                    ax.set_ylim(center - expanded_range/2, center + expanded_range/2)
+                else:
+                    # 否则使用正常范围并稍微扩展
+                    padding = value_range * 0.1
+                    ax.set_ylim(min_val - padding, max_val + padding)
 
                 # 绘制基线
                 if values:
@@ -744,33 +881,124 @@ class HTTPRealtimeClientUI(tk.Tk):
 
                 plt.tight_layout()
 
-                # 简化显示：直接嵌入canvas到标签中
+                # 清理标签内容并嵌入新的canvas
+                self.captured_label.config(text="")
+
+                # 创建并嵌入canvas - 添加验证
+                self._log("DEBUG: Creating FigureCanvasTkAgg...")
                 canvas = FigureCanvasTkAgg(fig, master=self.captured_label)
+
+                # 验证canvas创建是否成功
+                if canvas is None:
+                    raise RuntimeError("Failed to create matplotlib canvas")
+
+                # 绘制图表
+                self._log("DEBUG: Drawing canvas...")
                 canvas.draw()
-                canvas.get_tk_widget().pack(fill='both', expand=True)
+
+                # 获取widget并验证
+                widget = canvas.get_tk_widget()
+                if widget is None:
+                    raise RuntimeError("Failed to get tkinter widget from canvas")
+
+                # 嵌入widget
+                self._log("DEBUG: Packing canvas widget...")
+                widget.pack(fill='both', expand=True)
+
+                # 验证widget是否正确嵌入
+                self.after(100, lambda: self._verify_canvas_display(canvas, fig))
 
                 # 保存引用
                 self.captured_canvas = canvas
                 self.captured_fig = fig
 
+                self._log(f"DEBUG: Canvas created and embedded successfully")
+
         except Exception as e:
             self._log(f"Error displaying captured curve: {str(e)}", "ERROR")
             self.captured_label.config(text=f"显示错误: {str(e)}", image="")
 
+    def _verify_canvas_display(self, canvas, fig):
+        """验证canvas是否正确显示"""
+        try:
+            if canvas is None:
+                self._log("ERROR: Canvas is None after creation", "ERROR")
+                return
+
+            widget = canvas.get_tk_widget()
+            if widget is None:
+                self._log("ERROR: Widget is None after canvas creation", "ERROR")
+                return
+
+            # 检查widget是否可见
+            try:
+                if widget.winfo_viewable():
+                    self._log("DEBUG: Canvas widget is visible and properly displayed")
+                else:
+                    self._log("WARNING: Canvas widget is not visible", "WARNING")
+            except Exception as e:
+                self._log(f"DEBUG: Could not verify widget visibility: {e}")
+
+            # 检查widget尺寸
+            try:
+                width = widget.winfo_width()
+                height = widget.winfo_height()
+                self._log(f"DEBUG: Canvas widget size: {width}x{height}")
+            except Exception as e:
+                self._log(f"DEBUG: Could not get widget size: {e}")
+
+        except Exception as e:
+            self._log(f"Error in canvas verification: {str(e)}", "ERROR")
+
     def _clear_capture(self):
         """清除截取的曲线"""
-        # 清除canvas
-        if hasattr(self, 'captured_canvas'):
-            self.captured_canvas.get_tk_widget().destroy()
-            self.captured_canvas = None
-        if hasattr(self, 'captured_fig'):
-            plt.close(self.captured_fig)
-            self.captured_fig = None
+        try:
+            import matplotlib.pyplot as plt
 
-        self.captured_label.config(text="No captured curve yet. Click '截取曲线' to capture data.", image="")
-        self.captured_label.image = None
-        self.captured_count_label.config(text="N/A")
-        self.captured_source_label.config(text="N/A")
+            self._log("DEBUG: Clearing previous captured curve...")
+
+            # 清除canvas - 修复关键：确保彻底清理
+            if hasattr(self, 'captured_canvas') and self.captured_canvas is not None:
+                try:
+                    # 获取canvas的tkinter widget并销毁
+                    widget = self.captured_canvas.get_tk_widget()
+                    if widget.winfo_exists():
+                        widget.destroy()
+                except Exception as e:
+                    self._log(f"DEBUG: Error destroying canvas widget: {e}")
+                finally:
+                    self.captured_canvas = None
+
+            # 清除matplotlib图形对象
+            if hasattr(self, 'captured_fig') and self.captured_fig is not None:
+                try:
+                    plt.close(self.captured_fig)
+                except Exception as e:
+                    self._log(f"DEBUG: Error closing figure: {e}")
+                finally:
+                    self.captured_fig = None
+
+            # 清除标签的所有子组件 - 确保彻底清理
+            for widget in self.captured_label.winfo_children():
+                try:
+                    widget.destroy()
+                except Exception as e:
+                    self._log(f"DEBUG: Error destroying child widget: {e}")
+
+            # 重置标签状态
+            self.captured_label.config(text="No captured curve yet. Click '截取曲线' to capture data.", image="")
+            self.captured_label.image = None
+
+            # 重置信息标签
+            self.captured_count_label.config(text="N/A")
+            self.captured_source_label.config(text="N/A")
+
+            self._log("DEBUG: Capture cleared successfully")
+
+        except Exception as e:
+            self._log(f"Error in _clear_capture: {str(e)}", "ERROR")
+
+        # 禁用清除按钮
         self.btn_clear_capture.config(state="disabled")
         self._log("Captured curve cleared")
 
@@ -781,6 +1009,210 @@ class HTTPRealtimeClientUI(tk.Tk):
 
         self.log_text.insert("end", log_entry)
         self.log_text.see("end")  # 自动滚动到底部
+
+    def _apply_roi_config(self):
+        """应用ROI配置"""
+        if not self.connected or not self.http_client:
+            messagebox.showerror("错误", "请先连接到服务器")
+            return
+
+        try:
+            self._log("应用ROI配置...")
+
+            # 获取配置值
+            x1 = int(self.roi_x1_var.get())
+            y1 = int(self.roi_y1_var.get())
+            x2 = int(self.roi_x2_var.get())
+            y2 = int(self.roi_y2_var.get())
+
+            # 验证ROI坐标
+            if x2 <= x1 or y2 <= y1:
+                messagebox.showerror("错误", "ROI坐标无效：X2必须大于X1，Y2必须大于Y1")
+                return
+
+            # 发送ROI配置请求
+            roi_data = {
+                "x1": x1, "y1": y1, "x2": x2, "y2": y2,
+                "password": self.http_client.password
+            }
+
+            response = self.http_client.session.post(
+                f"{self.http_client.base_url}/roi/config",
+                data=roi_data,
+                timeout=5
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("success"):
+                    self._log(f"✅ ROI配置应用成功: X={x1},{x2}, Y={y1},{y2}")
+                else:
+                    messagebox.showerror("配置失败", f"ROI配置失败: {result.get('error', '未知错误')}")
+            else:
+                messagebox.showerror("配置失败", f"服务器错误: {response.status_code}")
+
+        except ValueError as e:
+            messagebox.showerror("输入错误", f"参数格式错误: {str(e)}")
+        except Exception as e:
+            self._log(f"ROI配置应用失败: {str(e)}", "ERROR")
+            messagebox.showerror("配置失败", f"ROI配置应用失败: {str(e)}")
+
+    def _apply_peak_config(self):
+        """应用波峰检测配置"""
+        if not self.connected or not self.http_client:
+            messagebox.showerror("错误", "请先连接到服务器")
+            return
+
+        try:
+            self._log("应用波峰检测配置...")
+
+            # 获取配置值
+            threshold = float(self.peak_threshold_var.get())
+            margin_frames = int(self.peak_margin_var.get())
+            diff_threshold = float(self.peak_diff_var.get())
+
+            # 验证参数范围
+            if not (50 <= threshold <= 255):
+                messagebox.showerror("错误", "绝对阈值必须在50-255之间")
+                return
+            if not (1 <= margin_frames <= 20):
+                messagebox.showerror("错误", "边界帧数必须在1-20之间")
+                return
+            if not (0.1 <= diff_threshold <= 10.0):
+                messagebox.showerror("错误", "差值阈值必须在0.1-10.0之间")
+                return
+
+            # 发送波峰检测配置请求
+            peak_data = {
+                "threshold": threshold,
+                "margin_frames": margin_frames,
+                "difference_threshold": diff_threshold,
+                "password": self.http_client.password
+            }
+
+            response = self.http_client.session.post(
+                f"{self.http_client.base_url}/peak-detection/config",
+                data=peak_data,
+                timeout=5
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("success"):
+                    self._log(f"✅ 波峰检测配置应用成功: 阈值={threshold}, 边界={margin_frames}, 差值={diff_threshold}")
+                else:
+                    messagebox.showerror("配置失败", f"波峰检测配置失败: {result.get('error', '未知错误')}")
+            else:
+                messagebox.showerror("配置失败", f"服务器错误: {response.status_code}")
+
+        except ValueError as e:
+            messagebox.showerror("输入错误", f"参数格式错误: {str(e)}")
+        except Exception as e:
+            self._log(f"波峰检测配置应用失败: {str(e)}", "ERROR")
+            messagebox.showerror("配置失败", f"波峰检测配置应用失败: {str(e)}")
+
+    def _save_config(self):
+        """保存配置到后端fem_config.json"""
+        try:
+            config_updates = {
+                "roi_capture": {
+                    "default_config": {
+                        "x1": int(self.roi_x1_var.get()),
+                        "y1": int(self.roi_y1_var.get()),
+                        "x2": int(self.roi_x2_var.get()),
+                        "y2": int(self.roi_y2_var.get())
+                    },
+                    "frame_rate": float(self.roi_fps_var.get())
+                },
+                "peak_detection": {
+                    "threshold": float(self.peak_threshold_var.get()),
+                    "margin_frames": int(self.peak_margin_var.get()),
+                    "difference_threshold": float(self.peak_diff_var.get())
+                }
+            }
+
+            # 使用后端API保存配置
+            config_data = json.dumps(config_updates, ensure_ascii=False)
+
+            response = self.http_client.session.post(
+                f"{self.http_client.base_url}/config",
+                params={
+                    "config_data": config_data,
+                    "password": self.http_client.password
+                },
+                timeout=5
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("success", True):
+                    self._log("✅ 配置已保存到服务器 fem_config.json")
+                    messagebox.showinfo("保存成功", "配置已保存到服务器 fem_config.json")
+                else:
+                    error_msg = result.get("error", "保存失败")
+                    self._log(f"配置保存失败: {error_msg}", "ERROR")
+                    messagebox.showerror("保存失败", f"配置保存失败: {error_msg}")
+            else:
+                error_text = response.text
+                self._log(f"配置保存失败: HTTP {response.status_code} - {error_text}", "ERROR")
+                messagebox.showerror("保存失败", f"配置保存失败: {response.status_code}")
+
+        except Exception as e:
+            self._log(f"配置保存失败: {str(e)}", "ERROR")
+            messagebox.showerror("保存失败", f"配置保存失败: {str(e)}")
+
+    def _load_config(self):
+        """从后端fem_config.json加载配置"""
+        try:
+            if not self.connected or not self.http_client:
+                messagebox.showerror("错误", "请先连接到服务器")
+                return
+
+            # 使用后端API获取配置
+            response = self.http_client.session.get(
+                f"{self.http_client.base_url}/config",
+                params={
+                    "password": self.http_client.password
+                },
+                timeout=5
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                if "config" in result:
+                    config = result["config"]
+
+                    # 加载ROI配置
+                    if "roi_capture" in config:
+                        roi_config = config["roi_capture"]
+                        default_config = roi_config.get("default_config", {})
+                        self.roi_x1_var.set(str(default_config.get("x1", 0)))
+                        self.roi_y1_var.set(str(default_config.get("y1", 0)))
+                        self.roi_x2_var.set(str(default_config.get("x2", 200)))
+                        self.roi_y2_var.set(str(default_config.get("y2", 150)))
+                        self.roi_fps_var.set(str(roi_config.get("frame_rate", 2)))
+
+                    # 加载波峰检测配置
+                    if "peak_detection" in config:
+                        peak_config = config["peak_detection"]
+                        self.peak_threshold_var.set(str(peak_config.get("threshold", 105.0)))
+                        self.peak_margin_var.set(str(peak_config.get("margin_frames", 5)))
+                        self.peak_diff_var.set(str(peak_config.get("difference_threshold", 2.1)))
+
+                    self._log("✅ 配置已从服务器 fem_config.json 加载")
+                    messagebox.showinfo("加载成功", "配置已从服务器 fem_config.json 加载")
+                else:
+                    error_msg = result.get("error", "获取配置失败")
+                    self._log(f"加载配置失败: {error_msg}", "ERROR")
+                    messagebox.showerror("加载失败", f"加载配置失败: {error_msg}")
+            else:
+                error_text = response.text
+                self._log(f"加载配置失败: HTTP {response.status_code} - {error_text}", "ERROR")
+                messagebox.showerror("加载失败", f"加载配置失败: {response.status_code}")
+
+        except Exception as e:
+            self._log(f"配置加载失败: {str(e)}", "ERROR")
+            messagebox.showerror("加载失败", f"配置加载失败: {str(e)}")
 
         # 限制日志行数
         lines = int(self.log_text.index("end-1c").split(".")[0])

@@ -34,6 +34,15 @@ class RoiCaptureService:
         self._logger.info("ROI Capture Service initialized with JSON config: frame_rate=%d, update_interval=%.1f",
                          self._frame_rate, self._cache_interval)
 
+    def clear_cache(self):
+        """
+        清除ROI截图缓存，强制下次截图时重新捕获
+        """
+        self._cached_roi_data = None
+        self._last_roi_config = None
+        self._last_capture_time = 0.0
+        self._logger.debug("ROI cache cleared - next capture will be forced")
+
     def capture_screen(self) -> Optional[Image.Image]:
         """
         截取整个屏幕

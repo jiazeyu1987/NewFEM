@@ -7,11 +7,13 @@
 import json
 import base64
 import io
+import os
 import numpy as np
 from datetime import datetime
 from PIL import Image
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from typing import Optional
 import uvicorn
 
 app = FastAPI(title='NewFEM Complete Test Server', version='1.0.0')
@@ -200,6 +202,112 @@ async def get_roi_capture_with_peaks(count: int = 100):
         }
     }
 
+# 配置管理API端点
+CONFIG_FILE = "fem_config.json"
+
+# 默认配置
+DEFAULT_CONFIG = {
+    "server": {
+        "host": "0.0.0.0",
+        "api_port": 8421,
+        "socket_port": 30415,
+        "max_clients": 10,
+        "enable_cors": True,
+        "allowed_origins": ["*"]
+    },
+    "data_processing": {
+        "fps": 45,
+        "buffer_size": 100,
+        "max_frame_count": 10000
+    },
+    "roi_capture": {
+        "frame_rate": 2,
+        "update_interval": 0.5,
+        "default_config": {
+            "x1": 0,
+            "y1": 0,
+            "x2": 200,
+            "y2": 150
+        }
+    },
+    "peak_detection": {
+        "threshold": 102.7,
+        "margin_frames": 6,
+        "difference_threshold": 2.3,
+        "min_region_length": 4
+    },
+    "security": {
+        "password": "31415"
+    },
+    "logging": {
+        "level": "INFO"
+    }
+}
+
+def load_config():
+    """加载配置文件"""
+    try:
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        else:
+            return DEFAULT_CONFIG.copy()
+    except Exception:
+        return DEFAULT_CONFIG.copy()
+
+def save_config(config):
+    """保存配置文件"""
+    try:
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception:
+        return False
+
+@app.get('/config')
+async def get_config(password: str = '31415'):
+    """获取配置"""
+    if password != '31415':
+        raise HTTPException(status_code=401, detail="密码错误")
+
+    config = load_config()
+    return {"config": config}
+
+@app.post('/config')
+async def update_config(
+    config_data: Optional[str] = None,
+    password: str = '31415'
+):
+    """更新配置"""
+    if password != '31415':
+        raise HTTPException(status_code=401, detail="密码错误")
+
+    try:
+        if config_data:
+            # 解析配置数据
+            updates = json.loads(config_data)
+            config = load_config()
+
+            # 更新配置
+            for section, values in updates.items():
+                if section in config and isinstance(values, dict):
+                    config[section].update(values)
+                else:
+                    config[section] = values
+
+            # 保存配置
+            if save_config(config):
+                return {"success": True, "message": "配置更新成功"}
+            else:
+                return {"success": False, "error": "配置保存失败"}
+        else:
+            return {"success": False, "error": "没有提供配置数据"}
+
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="配置数据JSON格式错误")
+    except Exception as e:
+        return {"success": False, "error": f"更新配置失败: {str(e)}"}
+
 if __name__ == '__main__':
     print('Starting NewFEM Complete Test Server on http://localhost:8422')
     print('Available endpoints:')
@@ -208,5 +316,7 @@ if __name__ == '__main__':
     print('   GET  /data/realtime')
     print('   POST /control')
     print('   GET  /data/roi-window-capture-with-peaks')
+    print('   GET  /config')
+    print('   POST /config')
     print('Server ready for HTTP client testing!')
     uvicorn.run(app, host='0.0.0.0', port=8422)

@@ -6,7 +6,11 @@
       "Bash(find:*)",
       "Bash(curl:*)",
       "Bash(git log:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(netstat:*)",
+      "Bash(tasklist:*)",
+      "Bash(Get-Process python)",
+      "Bash(Format-Table Id, ProcessName)"
     ],
     "deny": [],
     "ask": []
