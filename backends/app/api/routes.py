@@ -146,6 +146,27 @@ async def realtime_data(
     count: int = Query(100, ge=1, le=1000, description="Number of data points"),
 ) -> RealtimeDataResponse:
     logger.debug("📈 Realtime data requested: count=%d", count)
+
+    # 检查系统状态
+    system_status = data_store.get_status()
+    if system_status != SystemStatus.RUNNING and system_status != SystemStatus.PAUSED:
+        logger.debug("🛑 System not running (status=%s), returning empty data", system_status.value)
+        now = datetime.utcnow()
+        return RealtimeDataResponse(
+            timestamp=now,
+            frame_count=data_store.get_frame_count(),
+            series=[],  # 返回空序列
+            roi_data=RoiData(
+                width=200,
+                height=150,
+                pixels=create_roi_data_with_image(0.0)[0],
+                gray_value=0.0,
+                format="base64",
+            ),
+            peak_signal=None,
+            baseline=data_store.get_baseline(),
+        )
+
     frames = data_store.get_series(count)
     if not frames:
         # 如果没有数据，返回空序列和默认 ROI

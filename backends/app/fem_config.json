@@ -15,7 +15,7 @@
     "max_frame_count": 10000
   },
   "roi_capture": {
-    "frame_rate": 4.0,
+    "frame_rate": 4,
     "update_interval": 0.5,
     "default_config": {
       "x1": 1480,
@@ -25,10 +25,10 @@
     }
   },
   "peak_detection": {
-    "threshold": 104.0,
-    "margin_frames": 5,
-    "difference_threshold": 1.1,
-    "min_region_length": 5
+    "threshold": 102.7,
+    "margin_frames": 6,
+    "difference_threshold": 2.3,
+    "min_region_length": 4
   },
   "security": {
     "password": "31415"

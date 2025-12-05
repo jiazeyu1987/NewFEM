@@ -2261,28 +2261,24 @@
                 return;
             }
 
-            // 先乐观更新UI
-            const oldState = appState.detectionState;
-
-            let newState = oldState;
-            if (action === 'start_detection') newState = 'RUNNING';
-            if (action === 'stop_detection') newState = 'STOPPED';
-            if (action === 'pause_detection') newState = 'PAUSED';
-            if (action === 'resume_detection') newState = 'RUNNING';
-
-            appState.detectionState = newState;
-            updateUI();
-
-            // 发送命令
+            // 发送命令到服务器
             const res = await ApiService.sendControl(action);
             if (res.status !== 'success') {
                 alert('Command failed!');
-                appState.detectionState = oldState; // 回滚
+                // 保持原状态不变
                 updateUI();
-                updatePollingInterval(); // 恢复原来的轮询间隔
             } else {
-                // 命令成功，更新轮询间隔
+                // 命令成功，更新状态
+                let newState = appState.detectionState;
+                if (action === 'start_detection') newState = 'RUNNING';
+                if (action === 'stop_detection') newState = 'STOPPED';
+                if (action === 'pause_detection') newState = 'PAUSED';
+                if (action === 'resume_detection') newState = 'RUNNING';
+
+                appState.detectionState = newState;
+                updateUI();
                 updatePollingInterval();
+                console.log(`✅ Detection ${action.replace('_detection', '')} successfully, state updated to: ${newState}`);
             }
         }
 

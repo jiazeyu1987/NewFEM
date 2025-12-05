@@ -29,20 +29,25 @@ NewFEM/
 │       ├── models.py          # Pydantic models
 │       └── logging_config.py  # Logging configuration
 ├── python_client/              # Python GUI client application
-│   ├── run_realtime_client.py # Main entry point for Python GUI
-│   ├── http_realtime_client.py # HTTP client with tkinter GUI
-│   ├── realtime_plotter.py    # matplotlib-based real-time plotting
+│   ├── run_realtime_client.py # Main entry point for Python GUI (recommended)
+│   ├── http_realtime_client.py # Full-featured HTTP client with tkinter GUI (62KB)
+│   ├── simple_http_client.py  # Simplified HTTP client (16KB)
+│   ├── realtime_plotter.py    # matplotlib-based real-time plotting component
 │   ├── local_config_loader.py # Configuration management from fem_config.json
-│   ├── simple_http_client.py  # Simplified HTTP client
-│   └── test_config_integration.py # Basic configuration tests
+│   ├── enhanced_ui.py          # Enhanced GUI implementation
+│   ├── client.py              # Core HTTP client functionality
+│   ├── socket_client.py       # Legacy socket client for TCP protocol
+│   └── test_config_integration.py # Configuration integration tests
 ├── fronted/                    # Web frontend application (note: typo in name)
 │   └── index.html             # Complete vanilla JS application
 └── doc/                       # Comprehensive documentation
-    ├── system-architecture.md
-    ├── api-interface-spec.md
-    ├── backend-requirements.md
-    ├── frontend-requirements.md
-    └── data-specifications.md
+    ├── system-architecture.md # System architecture (Chinese)
+    ├── api-interface-spec.md  # Detailed API specification
+    ├── backend-requirements.md # Backend requirements (Chinese)
+    ├── frontend-requirements.md # Frontend requirements (Chinese)
+    ├── data-specifications.md # Data format specifications
+    ├── python_client/README.md # Python client development guide
+    └── Various Chinese feature documentation files
 ```
 
 ## Common Commands
@@ -75,7 +80,7 @@ cd python_client && python run_realtime_client.py
 cd backends && pip install -r requirements.txt
 
 # Install Python client dependencies
-pip install requests matplotlib pillow
+pip install requests matplotlib pillow numpy
 
 # Development server with auto-reload (backend only)
 cd backends && uvicorn app.api.routes:app --reload --host 0.0.0.0 --port 8421
@@ -85,16 +90,23 @@ cd backends && uvicorn app.api.routes:app --reload --host 0.0.0.0 --port 8421
 ```
 
 ### Code Quality
+**Note: No automated code quality tools are currently configured.** The project doesn't include black, mypy, flake8, or other linting tools. To add code quality tools:
 ```bash
-# Code formatting
+# Install formatting and linting tools (if needed)
+cd backends && pip install black mypy flake8
+
+# Code formatting (once configured)
 cd backends && black .
 
-# Type checking
+# Type checking (once configured)
 cd backends && mypy .
+
+# Linting (once configured)
+cd backends && flake8 .
 ```
 
 ### Testing
-**Note: No testing framework is currently configured.** The codebase does not include pytest, unittest, or other testing setup. To add testing:
+**Note: No testing framework is currently configured.** The codebase has manual test files (`test_*.py`) but no automated testing setup. To add testing:
 ```bash
 # Install pytest (if needed)
 cd backends && pip install pytest
@@ -121,13 +133,15 @@ VS Code-style UI                    60 FPS Signal Simulation
 ### Backend Architecture (FastAPI)
 
 **Core Components:**
-- `backends/app/api/routes.py`: FastAPI application with all REST endpoints
+- `backends/app/api/routes.py`: FastAPI application with all REST endpoints (HTTP API on port 8421)
+- `backends/app/core/socket_server.py`: Traditional TCP socket server (legacy protocol on port 30415)
 - `backends/app/core/processor.py`: Background thread generating simulated data at 60 FPS
 - `backends/app/core/data_store.py`: Thread-safe circular buffer for time-series data
 - `backends/app/core/roi_capture.py`: ROI capture and image processing functionality
 - `backends/app/core/enhanced_peak_detector.py`: Enhanced peak detection algorithms
+- `backends/app/core/config_manager.py`: Centralized configuration management from JSON
 - `backends/app/models.py`: Pydantic models for API request/response validation
-- `backends/app/config.py`: Centralized configuration using Pydantic BaseSettings
+- `backends/app/config.py`: Environment-based configuration using Pydantic BaseSettings
 - `backends/app/utils/roi_image_generator.py`: Generates ROI visualizations as base64 images
 - `backends/app/logging_config.py`: Structured logging configuration
 
@@ -157,8 +171,9 @@ VS Code-style UI                    60 FPS Signal Simulation
 
 **Real-time Data Polling:**
 - System status: Every 5 seconds
-- Real-time data: Every 50ms (20 FPS)
+- Real-time data: Every 50ms (20 FPS display, backend generates at 45 FPS)
 - Auto-reconnection with exponential backoff
+- Chart rendering: Canvas-based at 20 FPS for performance
 
 **UI Architecture:**
 - VS Code-styled dark theme interface
@@ -169,15 +184,19 @@ VS Code-style UI                    60 FPS Signal Simulation
 ## Configuration
 
 ### Environment Variables (Backend)
+Primary configuration is handled through `fem_config.json`. Environment variables provide overrides:
 ```bash
-NEWFEM_HOST=0.0.0.0              # Server host
-NEWFEM_PORT=8421                 # API port
-NEWFEM_LOG_LEVEL=INFO           # Logging level
-NEWFEM_BUFFER_SIZE=100          # Circular buffer size
-NEWFEM_FRAME_RATE=60            # Data generation FPS
-NEWFEM_PASSWORD=31415           # Control command password
-NEWFEM_ENABLE_CORS=True         # CORS configuration
+NEWFEM_HOST=0.0.0.0              # Server host (from fem_config.json)
+NEWFEM_API_PORT=8421             # HTTP API port (from fem_config.json)
+NEWFEM_SOCKET_PORT=30415         # Legacy socket port (from fem_config.json)
+NEWFEM_LOG_LEVEL=INFO            # Logging level (INFO, DEBUG, WARNING, ERROR)
+NEWFEM_BUFFER_SIZE=100           # Circular buffer size (from fem_config.json)
+NEWFEM_FRAME_RATE=45             # Data generation FPS (from fem_config.json, not 60)
+NEWFEM_PASSWORD=31415            # Control command password (from fem_config.json)
+NEWFEM_ENABLE_CORS=True          # CORS configuration (from fem_config.json)
 ```
+
+**Note**: The actual default frame rate is 45 FPS (not 60) as configured in `fem_config.json`.
 
 ### Frontend Configuration
 - Server URL: Configurable via UI (default: `http://localhost:8421`)
@@ -204,6 +223,12 @@ NEWFEM_ENABLE_CORS=True         # CORS configuration
 - `POST /analyze`: Video analysis interface (supports both file upload and real-time mode)
 - Returns: Analysis results with events, baseline calculations, and statistical data
 
+### Legacy Socket Protocol (Port 30415)
+- **For legacy clients**: TCP socket server provides backward compatibility
+- **Format**: Raw JSON messages over TCP connection
+- **Usage**: Primarily for older Python client implementations
+- **Note**: Modern clients should use HTTP API for better compatibility
+
 ## Development Guidelines
 
 ### Backend Development
@@ -226,9 +251,23 @@ NEWFEM_ENABLE_CORS=True         # CORS configuration
 3. Frontend: Add UI controls in side panels, integrate with existing polling system
 4. Documentation: Update this file and the comprehensive docs in `doc/` directory
 
+## Project Status
+
+### Current State
+- **Active Development**: Project is actively maintained with recent commits
+- **Git Status**: Clean working directory (as of last analysis)
+- **Modified Files**: `backends/app/fem_config.json` (currently modified)
+- **Branch**: `main` (up to date with origin/main)
+
+### Recent Development
+- Enhanced UI implementation for Python client
+- Improved configuration management
+- Real-time plotting capabilities
+- Mock mode support for frontend development
+
 ## Important Notes
 
-- **Real-time Performance**: System is designed for 60 FPS data generation and 20 FPS display updates
+- **Real-time Performance**: System is designed for 45 FPS data generation and 20 FPS display updates
 - **Manual Data Processing**: Data processing must be started manually via the UI control panel (not automatic)
 - **Authentication**: Control commands require password authentication (default: `31415`)
 - **Data Persistence**: No database - uses in-memory circular buffer only

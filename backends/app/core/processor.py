@@ -54,7 +54,15 @@ class DataProcessor:
     def stop(self) -> None:
         self._stop_event.set()
         data_store.set_status(SystemStatus.STOPPED)
-        self._logger.info("DataProcessor stop requested")
+        self._logger.info("🛑 DataProcessor stop requested - stop_event set, status set to STOPPED")
+
+        # 等待线程真正停止
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=2.0)  # 最多等待2秒
+            if self._thread.is_alive():
+                self._logger.warning("⚠️ DataProcessor thread did not stop within timeout")
+            else:
+                self._logger.info("✅ DataProcessor thread stopped successfully")
 
     def _run(self) -> None:
         interval = 1.0 / float(settings.fps)
