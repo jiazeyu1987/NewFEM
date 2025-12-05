@@ -666,13 +666,7 @@
                     <span>显示数据点</span>
                 </label>
 
-                <div class="range-slider-container">
-                    <div class="status-row">
-                        <span>Y轴缩放</span>
-                        <span id="zoom-value" class="status-value">1.0x</span>
-                    </div>
-                    <input type="range" id="zoom-slider" min="0.5" max="3.0" step="0.1" value="1.0">
-                </div>
+                <!-- Y轴已固定为0-200范围，不可调节 -->
             </div>
         </div>
     </div>
@@ -730,7 +724,7 @@
                 showGrid: true,
                 showBaseline: true,
                 showPoints: true,
-                zoom: 1.0,
+                zoom: 1.0, // 固定为1.0，Y轴不可缩放，确保0-200范围固定
                 offsetY: 0
             },
             // ROI配置状态
@@ -1014,7 +1008,9 @@
                 this.resize();
                 window.addEventListener('resize', () => this.resize());
                 
-                // 滚轮缩放
+                // 滚轮缩放已禁用 - Y轴固定为0-200范围，不可缩放
+                // 如果需要恢复缩放功能，请取消注释以下代码：
+                /*
                 this.canvas.addEventListener('wheel', (e) => {
                     e.preventDefault();
                     const delta = Math.sign(e.deltaY) * -0.1;
@@ -1024,6 +1020,7 @@
                     document.getElementById('zoom-value').innerText = appState.chartState.zoom + 'x';
                     this.draw();
                 });
+                */
 
                 // 鼠标交互
                 this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
@@ -1055,19 +1052,23 @@
                 this.ctx.fillStyle = '#1e1e1e';
                 this.ctx.fillRect(0, 0, width, height);
 
-                // Y轴 映射函数: 将 0-255 映射到 Canvas 高度
-                // 放大时围绕中心点 (128) 放大
+                // Y轴 映射函数: 将 0-200 映射到 Canvas 高度
+                // 放大时围绕中心点 (100) 放大
                 const midY = height / 2;
-                const scaleY = (height / 255) * zoom; 
-                const mapY = (val) => midY - (val - 128) * scaleY; // 翻转Y轴，大值在上方
+                const scaleY = (height / 200) * zoom;
+                const mapY = (val) => {
+                    // 限制数据值在0-200范围内，确保Y轴真正固定
+                    const clampedVal = Math.max(0, Math.min(200, val));
+                    return midY - (clampedVal - 100) * scaleY; // 翻转Y轴，大值在上方
+                };
 
                 // 2. 绘制网格
                 if (showGrid) {
                     this.ctx.strokeStyle = '#333';
                     this.ctx.lineWidth = 1;
                     this.ctx.beginPath();
-                    // 简单的水平网格
-                    for (let v = 0; v <= 255; v += 50) {
+                    // 简单的水平网格 (0-200范围，每40格)
+                    for (let v = 0; v <= 200; v += 40) {
                         const y = mapY(v);
                         this.ctx.moveTo(0, y);
                         this.ctx.lineTo(width, y);
@@ -1731,35 +1732,20 @@
                 const dataMax = Math.max(...dataValues);
                 const dataRange = dataMax - dataMin;
 
-                // 改进的Y轴映射 - 使用数据自动缩放
-                let mapY;
-                let scaleY;
-                let midY;
+                // 固定Y轴映射 - 使用0-200范围
+                let midY = height / 2;
+                let scaleY = (height / 200) * this.zoom;
+                let mapY = (val) => {
+                    // 限制数据值在0-200范围内，确保Y轴真正固定
+                    const clampedVal = Math.max(0, Math.min(200, val));
+                    return midY - (clampedVal - 100) * scaleY;
+                };
 
-                if (dataRange > 0 && dataRange < 50) {
-                    // 如果数据范围很小，使用自动缩放以突出变化
-                    const padding = dataRange * 0.2; // 20%边距
-                    const scaledMin = Math.max(0, dataMin - padding);
-                    const scaledMax = Math.min(255, dataMax + padding);
-                    const scaledRange = scaledMax - scaledMin;
-
-                    scaleY = (height * 0.8) / scaledRange; // 使用80%的高度
-                    midY = height * 0.9; // 基准点在90%位置
-                    mapY = (val) => midY - (val - scaledMin) * scaleY;
-
-                    console.log(`SubWaveformChart: Using auto-scale for small data range:`);
-                    console.log(`  - Data range: ${dataRange.toFixed(2)} (small)`);
-                    console.log(`  - Scaled range: ${scaledRange.toFixed(2)} (${scaledMin.toFixed(1)} - ${scaledMax.toFixed(1)})`);
-                    console.log(`  - ScaleY: ${scaleY.toFixed(3)}`);
-                } else {
-                    // 使用标准映射
-                    midY = height / 2;
-                    scaleY = (height / 255) * this.zoom;
-                    mapY = (val) => midY - (val - 128) * scaleY;
-
-                    console.log(`SubWaveformChart: Using standard mapping:`);
-                    console.log(`  - Data range: ${dataRange.toFixed(2)} (normal)`);
-                }
+                console.log(`SubWaveformChart: Using fixed 0-200 mapping:`);
+                console.log(`  - Data range: ${dataRange.toFixed(2)}`);
+                console.log(`  - ScaleY: ${scaleY.toFixed(3)} (zoom: ${this.zoom})`);
+                console.log(`  - Data min ${dataMin.toFixed(1)} -> Y: ${mapY(dataMin).toFixed(1)}`);
+                console.log(`  - Data max ${dataMax.toFixed(1)} -> Y: ${mapY(dataMax).toFixed(1)}`);
 
                 console.log(`SubWaveformChart: Y-axis mapping debug:`);
                 console.log(`  - Canvas size: ${width}x${height}`);
@@ -1768,7 +1754,7 @@
                 console.log(`  - Data range: ${dataMin.toFixed(1)} - ${dataMax.toFixed(1)} (span: ${dataRange.toFixed(1)})`);
                 console.log(`  - Y-mapping examples:`);
                 console.log(`    * Value 0 -> Y: ${mapY(0).toFixed(1)}`);
-                console.log(`    * Value 128 -> Y: ${mapY(128).toFixed(1)}`);
+                console.log(`    * Value 100 -> Y: ${mapY(100).toFixed(1)}`);
                 console.log(`    * Value 255 -> Y: ${mapY(255).toFixed(1)}`);
                 console.log(`    * Data min ${dataMin.toFixed(1)} -> Y: ${mapY(dataMin).toFixed(1)}`);
                 console.log(`    * Data max ${dataMax.toFixed(1)} -> Y: ${mapY(dataMax).toFixed(1)}`);
@@ -1785,7 +1771,7 @@
                     this.ctx.lineWidth = 1;
                     this.ctx.beginPath();
                     // 水平网格
-                    for (let v = 0; v <= 255; v += 50) {
+                    for (let v = 0; v <= 200; v += 40) {
                         const y = mapY(v);
                         this.ctx.moveTo(0, y);
                         this.ctx.lineTo(width, y);
@@ -2747,7 +2733,9 @@
                 chartRenderer.draw();
             });
             
-            // 缩放控制
+            // Y轴缩放已移除 - 固定为1.0x，确保Y轴范围始终为0-200
+            // 如果需要恢复缩放功能，请取消注释以下代码：
+            /*
             const zoomSlider = document.getElementById('zoom-slider');
             const zoomVal = document.getElementById('zoom-value');
             zoomSlider.addEventListener('input', (e) => {
@@ -2756,6 +2744,7 @@
                 zoomVal.innerText = val + 'x';
                 chartRenderer.draw();
             });
+            */
 
             // 检测控制
             document.getElementById('start-btn').addEventListener('click', () => handleControl('start_detection'));

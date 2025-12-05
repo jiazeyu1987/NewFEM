@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 from datetime import datetime
+from local_config_loader import LocalConfigLoader
 
 # 设置matplotlib字体
 plt.rcParams['font.sans-serif'] = ['Arial', 'DejaVu Sans', 'Liberation Sans']
@@ -82,7 +83,7 @@ class SimpleHTTPClient:
         self.ax.set_ylabel("Signal Value")
         self.ax.grid(True, alpha=0.3)
         self.ax.set_xlim(0, 10)
-        self.ax.set_ylim(20, 60)
+        self.ax.set_ylim(0, 200)
 
         # 创建线条
         self.signal_line, = self.ax.plot([], [], 'b-', linewidth=2, label='Signal', marker='o', markersize=2)
@@ -96,28 +97,143 @@ class SimpleHTTPClient:
         self.canvas.draw()
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
 
+    def _load_local_config(self):
+        """从本地配置文件加载配置"""
+        try:
+            self.log_message("正在加载本地配置文件...")
+
+            # 创建本地配置加载器
+            config_loader = LocalConfigLoader()
+
+            # 加载配置
+            success, message, config_data = config_loader.load_config()
+
+            if success:
+                self.log_message(f"✅ {message}")
+
+                # 应用配置
+                if self._apply_server_config(config_data):
+                    self.log_message("🎯 本地配置已成功应用")
+                    return True
+                else:
+                    self.log_message("⚠️ 本地配置应用失败，使用默认值")
+                    return False
+            else:
+                self.log_message(f"❌ 本地配置加载失败: {message}")
+                return False
+
+        except Exception as e:
+            self.log_message(f"❌ 本地配置加载异常: {str(e)}")
+            return False
+
+    def _auto_load_config(self):
+        """自动加载服务器配置"""
+        try:
+            self.log_message("正在自动加载服务器配置...")
+
+            # 请求配置
+            response = self.session.get(
+                f"{self.base_url}/config",
+                params={"password": self.password},
+                timeout=5
+            )
+
+            if response.status_code == 200:
+                config_data = response.json()
+                if "config" in config_data:
+                    config = config_data["config"]
+
+                    # 应用配置
+                    if self._apply_server_config(config):
+                        self.log_message("✅ 服务器配置自动加载成功")
+                        return True
+                    else:
+                        self.log_message("⚠️ 服务器配置格式异常，使用默认值")
+                        return False
+                else:
+                    self.log_message("⚠️ 服务器配置响应格式错误")
+                    return False
+            else:
+                self.log_message(f"⚠️ 获取服务器配置失败: HTTP {response.status_code}")
+                return False
+
+        except Exception as e:
+            self.log_message(f"⚠️ 自动加载配置失败: {str(e)}")
+            return False
+
+    def _apply_server_config(self, config_dict):
+        """应用从服务器加载的配置"""
+        try:
+            if not config_dict:
+                return False
+
+            config_applied = False
+
+            # 存储配置供ROI设置使用
+            self.server_config = config_dict
+
+            # 如果有ROI配置，标记为已应用
+            if "roi_capture" in config_dict:
+                roi_config = config_dict["roi_capture"]
+                if "default_config" in roi_config:
+                    self.roi_config = roi_config["default_config"]
+                    config_applied = True
+
+            return config_applied
+
+        except Exception as e:
+            self.log_message(f"应用服务器配置失败: {str(e)}")
+            return False
+
     def auto_start(self):
         """自动启动 - 无需用户手动连接"""
-        self.status_label.config(text="Connecting to server...")
+        self.status_label.config(text="Loading configuration...")
         self.root.update()
 
         try:
-            # 1. 测试连接
+            # 1. 首先加载本地配置（无需服务器连接）
+            self.log_message("正在加载本地配置文件...")
+            local_config_loaded = self._load_local_config()
+
+            self.status_label.config(text="Connecting to server...")
+            self.root.update()
+
+            # 2. 测试连接
             response = self.session.get(f"{self.base_url}/health", timeout=5)
             if response.status_code != 200:
                 raise Exception("Server not responding")
 
-            # 2. 自动配置ROI
-            roi_data = {"x1": 0, "y1": 0, "x2": 200, "y2": 150, "password": self.password}
+            # 3. 如果本地配置加载失败，尝试从服务器加载配置
+            if not local_config_loaded:
+                self.log_message("本地配置加载失败，尝试从服务器加载配置...")
+                self._auto_load_config()
+
+            # 4. 自动配置ROI (使用加载的配置或默认值)
+            if hasattr(self, 'roi_config'):
+                roi_data = {
+                    "x1": self.roi_config.get("x1", 0),
+                    "y1": self.roi_config.get("y1", 0),
+                    "x2": self.roi_config.get("x2", 200),
+                    "y2": self.roi_config.get("y2", 150),
+                    "password": self.password
+                }
+                if local_config_loaded:
+                    self.log_message(f"使用本地配置ROI: {roi_data}")
+                else:
+                    self.log_message(f"使用服务器配置ROI: {roi_data}")
+            else:
+                roi_data = {"x1": 0, "y1": 0, "x2": 200, "y2": 150, "password": self.password}
+                self.log_message("使用默认ROI配置")
+
             response = self.session.post(f"{self.base_url}/roi/config", data=roi_data, timeout=5)
 
-            # 3. 自动启动检测
+            # 4. 自动启动检测
             control_data = {"command": "start_detection", "password": self.password}
             response = self.session.post(f"{self.base_url}/control", data=control_data, timeout=5)
 
             self.status_label.config(text="Connected - Ready", foreground="green")
 
-            # 4. 自动开始数据收集
+            # 5. 自动开始数据收集
             self.root.after(1000, self.start_data_collection)
 
         except Exception as e:
@@ -201,10 +317,11 @@ class SimpleHTTPClient:
 
                 self.ax.set_xlim(x_min, x_max)
 
-                if len(self.signal_data) > 10:
-                    y_min = min(self.signal_data[-50:]) - 5
-                    y_max = max(self.signal_data[-50:]) + 5
-                    self.ax.set_ylim(y_min, y_max)
+                # Y轴固定范围0-200，不进行自动缩放
+                # if len(self.signal_data) > 10:
+                #     y_min = min(self.signal_data[-50:]) - 5
+                #     y_max = max(self.signal_data[-50:]) + 5
+                #     self.ax.set_ylim(y_min, y_max)
 
             # 重绘canvas
             self.canvas.draw_idle()
@@ -228,7 +345,7 @@ class SimpleHTTPClient:
         self.baseline_line.set_data([], [])
 
         self.ax.set_xlim(0, 10)
-        self.ax.set_ylim(20, 60)
+        self.ax.set_ylim(0, 200)
 
         self.canvas.draw()
         self.data_label.config(text="Data: 0 points")

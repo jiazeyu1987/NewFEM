@@ -25,7 +25,7 @@ plt.rcParams['axes.unicode_minus'] = False
 class RealtimePlotter:
     """实时绘图器"""
 
-    def __init__(self, master=None, figsize=(12, 8), max_points=1000):
+    def __init__(self, master=None, figsize=(12, 8), max_points=100):
         self.master = master
         self.figsize = figsize
         self.max_points = max_points
@@ -48,6 +48,7 @@ class RealtimePlotter:
         self.show_grid = True
         self.show_peaks = True
         self.show_enhanced_peaks = True
+        # auto_scale 仅用于控制 X 轴窗口，Y 轴固定 0-200
         self.auto_scale = True
 
         # 性能统计
@@ -71,7 +72,8 @@ class RealtimePlotter:
         self.ax_main.set_ylabel("Signal Value")
         self.ax_main.grid(True, alpha=0.3)
         self.ax_main.set_xlim(0, 10)  # 初始显示10秒数据
-        self.ax_main.set_ylim(100, 140)  # 初始Y轴范围
+        # 固定Y轴范围为0-200，与Web前端实时波形保持一致
+        self.ax_main.set_ylim(0, 200)
 
         # 创建主线（信号曲线）
         self.lines['signal'], = self.ax_main.plot([], [], 'b-', linewidth=1.5, label='Signal', alpha=0.8)
@@ -238,7 +240,7 @@ class RealtimePlotter:
             # 更新波峰信号图
             self.lines['peak_signal'].set_data(self.time_data, self.peak_data)
 
-            # 自动调整X轴范围
+            # 自动调整X轴范围（仅X轴）
             if self.auto_scale and self.time_data:
                 if self.time_data[-1] > 10:
                     # 显示最近10秒的数据
@@ -247,11 +249,8 @@ class RealtimePlotter:
                     self.ax_main.set_xlim(x_min, x_max)
                     self.ax_peak.set_xlim(x_min, x_max)
 
-            # 自动调整Y轴范围
-            if self.auto_scale and self.signal_data:
-                y_min = min(self.signal_data[-200:] if len(self.signal_data) > 200 else self.signal_data) - 5
-                y_max = max(self.signal_data[-200:] if len(self.signal_data) > 200 else self.signal_data) + 5
-                self.ax_main.set_ylim(y_min, y_max)
+            # Y轴范围固定为0-200，不根据数据自动缩放
+            self.ax_main.set_ylim(0, 200)
 
             # 更新网格
             self.ax_main.grid(self.show_grid, alpha=0.3)

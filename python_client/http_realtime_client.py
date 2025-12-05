@@ -17,6 +17,7 @@ import io
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
+from local_config_loader import LocalConfigLoader
 
 from realtime_plotter import RealtimePlotter
 
@@ -449,6 +450,10 @@ class HTTPRealtimeClientUI(tk.Tk):
             self.status_label.config(foreground="blue")
             self._log("Auto-connecting to server...")
 
+            # 首先加载本地配置（无需服务器连接）
+            self._log("🔄 自动加载本地配置文件...")
+            local_config_loaded = self._load_local_config()
+
             # 使用输入框中的URL和密码
             base_url = self.entry_base_url.get()
             password = self.entry_password.get()
@@ -462,14 +467,43 @@ class HTTPRealtimeClientUI(tk.Tk):
                 self._update_connection_status()
                 self._log("Auto-connection successful!")
 
-                # 配置ROI
+                # 如果本地配置加载失败，尝试从服务器加载配置
+                if not local_config_loaded:
+                    self._log("🔄 本地配置加载失败，尝试从服务器加载配置...")
+                    config_loaded = self._auto_load_config()
+                    if config_loaded:
+                        self._log("✅ 服务器配置加载成功，将应用配置参数")
+                    else:
+                        self._log("⚠️ 服务器配置加载失败，使用默认值")
+                else:
+                    self._log("✅ 本地配置加载成功，已应用到UI界面")
+
+                # 配置ROI（使用当前UI中的值或默认值）
                 self._log("Configuring ROI...")
                 session = self.http_client.session
-                roi_data = {"x1": 0, "y1": 0, "x2": 200, "y2": 150, "password": password}
+
+                # 从UI获取ROI参数
+                try:
+                    roi_x1 = int(self.roi_x1_var.get())
+                    roi_y1 = int(self.roi_y1_var.get())
+                    roi_x2 = int(self.roi_x2_var.get())
+                    roi_y2 = int(self.roi_y2_var.get())
+                except ValueError:
+                    # 如果UI值无效，使用默认值
+                    roi_x1, roi_y1 = 0, 0
+                    roi_x2, roi_y2 = 200, 150
+
+                roi_data = {
+                    "x1": roi_x1,
+                    "y1": roi_y1,
+                    "x2": roi_x2,
+                    "y2": roi_y2,
+                    "password": password
+                }
                 response = session.post(f"{self.http_client.base_url}/roi/config", data=roi_data, timeout=5)
 
                 if response.status_code == 200:
-                    self._log("ROI configured successfully!")
+                    self._log(f"ROI configuration successful: ({roi_x1}, {roi_y1}) → ({roi_x2}, {roi_y2})")
                 else:
                     self._log(f"ROI configuration failed: {response.status_code}")
 
@@ -1218,6 +1252,128 @@ class HTTPRealtimeClientUI(tk.Tk):
         lines = int(self.log_text.index("end-1c").split(".")[0])
         if lines > 1000:
             self.log_text.delete("1.0", "100.0")
+
+    def _apply_server_config(self, config_dict):
+        """应用从服务器加载的配置到UI字段"""
+        try:
+            if not config_dict:
+                self._log("服务器配置为空，使用默认值")
+                return False
+
+            config_applied = False
+            missing_fields = []
+
+            # 应用ROI配置
+            if "roi_capture" in config_dict:
+                roi_config = config_dict["roi_capture"]
+
+                # 应用ROI坐标
+                if "default_config" in roi_config:
+                    default_config = roi_config["default_config"]
+                    self.roi_x1_var.set(str(default_config.get("x1", 0)))
+                    self.roi_y1_var.set(str(default_config.get("y1", 0)))
+                    self.roi_x2_var.set(str(default_config.get("x2", 200)))
+                    self.roi_y2_var.set(str(default_config.get("y2", 150)))
+                    config_applied = True
+
+                # 应用ROI帧率
+                if "frame_rate" in roi_config:
+                    self.roi_fps_var.set(str(roi_config["frame_rate"]))
+                    config_applied = True
+            else:
+                missing_fields.append("roi_capture")
+
+            # 应用波峰检测配置
+            if "peak_detection" in config_dict:
+                peak_config = config_dict["peak_detection"]
+
+                self.peak_threshold_var.set(str(peak_config.get("threshold", 105.0)))
+                self.peak_margin_var.set(str(peak_config.get("margin_frames", 5)))
+                self.peak_diff_var.set(str(peak_config.get("difference_threshold", 2.1)))
+                config_applied = True
+            else:
+                missing_fields.append("peak_detection")
+
+            if config_applied:
+                self._log("✅ 成功应用服务器配置到UI")
+                if missing_fields:
+                    self._log(f"⚠️ 缺少配置字段: {', '.join(missing_fields)}")
+                return True
+            else:
+                self._log("⚠️ 配置格式不符合预期，使用默认值")
+                return False
+
+        except Exception as e:
+            self._log(f"❌ 应用服务器配置失败: {str(e)}", "ERROR")
+            return False
+
+    def _load_local_config(self):
+        """从本地配置文件加载配置"""
+        try:
+            self._log("🔄 正在加载本地配置文件...")
+
+            # 创建本地配置加载器
+            config_loader = LocalConfigLoader()
+
+            # 加载配置
+            success, message, config_data = config_loader.load_config()
+
+            if success:
+                self._log(f"✅ {message}")
+
+                # 应用配置到UI字段
+                if self._apply_server_config(config_data):
+                    self._log("🎯 本地配置已成功应用到UI界面")
+                    return True
+                else:
+                    self._log("⚠️ 本地配置应用失败，使用默认值")
+                    return False
+            else:
+                self._log(f"❌ 本地配置加载失败: {message}")
+                return False
+
+        except Exception as e:
+            self._log(f"❌ 本地配置加载异常: {str(e)}", "ERROR")
+            return False
+
+    def _auto_load_config(self):
+        """自动从服务器加载配置"""
+        try:
+            if not self.connected or not self.http_client:
+                self._log("⚠️ 服务器未连接，跳过自动配置加载")
+                return False
+
+            self._log("🔄 自动加载服务器配置...")
+
+            # 向服务器请求配置
+            response = self.http_client.session.get(
+                f"{self.http_client.base_url}/config",
+                params={"password": self.http_client.password},
+                timeout=5
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                if "config" in result:
+                    config = result["config"]
+                    success = self._apply_server_config(config)
+                    if success:
+                        self._log("🎯 自动配置加载完成")
+                        return True
+                    else:
+                        self._log("⚠️ 自动配置加载失败，使用默认值")
+                        return False
+                else:
+                    error_msg = result.get("error", "获取配置失败")
+                    self._log(f"❌ 自动配置加载失败: {error_msg}", "ERROR")
+                    return False
+            else:
+                self._log(f"❌ 获取配置失败: HTTP {response.status_code}", "ERROR")
+                return False
+
+        except Exception as e:
+            self._log(f"❌ 自动配置加载异常: {str(e)}", "ERROR")
+            return False
 
     def _on_closing(self):
         """窗口关闭事件"""

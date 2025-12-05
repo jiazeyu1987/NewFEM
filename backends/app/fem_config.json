@@ -15,19 +15,19 @@
     "max_frame_count": 10000
   },
   "roi_capture": {
-    "frame_rate": 3.0,
+    "frame_rate": 4.0,
     "update_interval": 0.5,
     "default_config": {
       "x1": 1480,
       "y1": 480,
-      "x2": 1480,
+      "x2": 1580,
       "y2": 580
     }
   },
   "peak_detection": {
-    "threshold": 106.0,
-    "margin_frames": 6,
-    "difference_threshold": 1.2,
+    "threshold": 104.0,
+    "margin_frames": 5,
+    "difference_threshold": 1.1,
     "min_region_length": 5
   },
   "security": {
